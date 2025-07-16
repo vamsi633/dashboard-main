@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+
+  font-family: Arial, Helvetica, sans-serif;
+}
+/* Remove default white background and style popup with dark theme */
+.mapboxgl-popup-content {
+  background-color: #0f111a !important;
+  color: white !important;
+  box-shadow: none !important;
+  border-radius: 12px !important;
+  padding: 16px !important;
+}
+
+.mapboxgl-popup-tip {
+  border-top-color: #0f111a !important;
+}
