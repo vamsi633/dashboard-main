@@ -380,17 +380,14 @@ export default function SensorsPage() {
                 <p className="text-gray-400 mb-4">
                   Sensor boxes will appear here once they start sending data.
                 </p>
-                <a
-                  href="/api/add-dummy-data"
-                  target="_blank"
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg inline-block"
-                >
-                  Add Test Box Data
-                </a>
+                <p className="text-gray-500 text-sm">
+                  Use the &quot;Add Device&quot; button on the home page to
+                  claim devices.
+                </p>
               </div>
             )}
 
-            {/* Dropdown for box selection (same UI) */}
+            {/* Dropdown for box selection */}
             {sensorData.boxes.length > 0 && (
               <div className="mb-8">
                 <div className="relative w-64">
@@ -436,7 +433,7 @@ export default function SensorsPage() {
 
             {selectedBox && (
               <>
-                {/* Stats Cards (same UI) */}
+                {/* Stats Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
                   <div className="bg-[#0F111A] border border-gray-600 rounded-lg p-4">
                     <h3 className="text-gray-400 text-sm mb-1">Avg Moisture</h3>
@@ -476,66 +473,97 @@ export default function SensorsPage() {
                   </div>
                 </div>
 
-                {/* Main Content Grid (same UI) */}
+                {/* Main Content Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {/* Map Section (same UI, updated for Arduino data) */}
+                  {/* Map Section - FIXED for Arduino data */}
                   <div className="bg-[#0F111A] border border-gray-600 rounded-lg p-4">
                     <h2 className="text-xl font-semibold mb-4">
-                      Sensor Locations
+                      Device Location
                     </h2>
-                    <MapboxMap
-                      sensors={selectedBox.sensors.map((sensor, index) => ({
-                        id: sensor.su_id,
-                        name: sensor.su_id,
-                        coordinates: [
-                          selectedBox.longitude + index * 0.001,
-                          selectedBox.latitude + index * 0.001,
-                        ] as [number, number],
-                        data: sensor.readings[sensor.readings.length - 1]
-                          ? {
-                              moisture:
-                                sensor.readings[sensor.readings.length - 1]
-                                  .moisture,
-                              moisture1:
-                                sensor.readings[sensor.readings.length - 1]
-                                  .moisture1,
-                              moisture2:
-                                sensor.readings[sensor.readings.length - 1]
-                                  .moisture2,
-                              moisture3:
-                                sensor.readings[sensor.readings.length - 1]
-                                  .moisture3,
-                              moisture4:
-                                sensor.readings[sensor.readings.length - 1]
-                                  .moisture4,
-                              humidity:
-                                sensor.readings[sensor.readings.length - 1]
-                                  .humidity,
-                              temperature:
-                                sensor.readings[sensor.readings.length - 1]
-                                  .temperature,
-                              lipVoltage:
-                                sensor.readings[sensor.readings.length - 1]
-                                  .lipVoltage,
-                              rtcBattery:
-                                sensor.readings[sensor.readings.length - 1]
-                                  .rtcBattery,
-                              dataPoints:
-                                sensor.readings[sensor.readings.length - 1]
-                                  .dataPoints,
-                            }
-                          : undefined,
-                      }))}
-                      center={
-                        [selectedBox.longitude, selectedBox.latitude] as [
-                          number,
-                          number
-                        ]
-                      }
-                      zoom={15}
-                      height="500px"
-                      showLabels={true}
-                    />
+
+                    {/* Debug coordinates - Remove after testing */}
+                    <div className="mb-4 p-2 bg-gray-800 rounded text-xs">
+                      <div>📍 Device: {selectedBox.box_id}</div>
+                      <div>
+                        🌍 Coordinates: {selectedBox.latitude},{" "}
+                        {selectedBox.longitude}
+                      </div>
+                      <div>
+                        📊 Has readings:{" "}
+                        {selectedBox.sensors[0]?.readings?.length > 0
+                          ? "Yes"
+                          : "No"}
+                      </div>
+                      <div>
+                        🔢 Total readings:{" "}
+                        {selectedBox.sensors[0]?.readings?.length || 0}
+                      </div>
+                    </div>
+
+                    {/* Render map only if we have valid coordinates */}
+                    {selectedBox.latitude &&
+                    selectedBox.longitude &&
+                    selectedBox.latitude !== 0 &&
+                    selectedBox.longitude !== 0 ? (
+                      <MapboxMap
+                        sensors={[
+                          {
+                            id: selectedBox.box_id,
+                            name: selectedBox.name || selectedBox.box_id,
+                            coordinates: [
+                              selectedBox.longitude,
+                              selectedBox.latitude,
+                            ] as [number, number],
+                            data:
+                              selectedBox.sensors[0]?.readings?.length > 0
+                                ? (() => {
+                                    const latestReading =
+                                      selectedBox.sensors[0].readings[
+                                        selectedBox.sensors[0].readings.length -
+                                          1
+                                      ];
+                                    return {
+                                      moisture: latestReading.moisture || 0,
+                                      moisture1: latestReading.moisture1 || 0,
+                                      moisture2: latestReading.moisture2 || 0,
+                                      moisture3: latestReading.moisture3 || 0,
+                                      moisture4: latestReading.moisture4 || 0,
+                                      humidity: latestReading.humidity || 0,
+                                      temperature:
+                                        latestReading.temperature || 0,
+                                      lipVoltage: latestReading.lipVoltage || 0,
+                                      rtcBattery: latestReading.rtcBattery || 0,
+                                      dataPoints: latestReading.dataPoints || 0,
+                                    };
+                                  })()
+                                : undefined,
+                          },
+                        ]}
+                        center={
+                          [selectedBox.longitude, selectedBox.latitude] as [
+                            number,
+                            number
+                          ]
+                        }
+                        zoom={15}
+                        height="500px"
+                        showLabels={true}
+                      />
+                    ) : (
+                      <div className="bg-gray-800 rounded-lg p-8 text-center">
+                        <h3 className="text-lg font-semibold text-gray-300 mb-2">
+                          Invalid Coordinates
+                        </h3>
+                        <p className="text-gray-400 mb-2">
+                          This device has invalid coordinates: (
+                          {selectedBox.latitude}, {selectedBox.longitude})
+                        </p>
+                        <p className="text-gray-500 text-sm">
+                          Device needs to be registered with valid GPS
+                          coordinates to show on map
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Data Table Section - Same complex multi-table UI, updated for Arduino */}
@@ -760,7 +788,7 @@ export default function SensorsPage() {
                   </div>
                 </div>
 
-                {/* Interactive Graph Section (same UI) */}
+                {/* Interactive Graph Section */}
                 <div className="mt-8">
                   <SensorGraph
                     selectedBox={convertBoxForSensorGraph(selectedBox)}

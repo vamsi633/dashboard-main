@@ -106,8 +106,8 @@ export async function POST(
         deviceId: deviceId,
         name: `Auto-registered ${deviceId}`,
         location: "Field Location - Auto-registered",
-        latitude: 37.3541, // Default coordinates (Santa Clara area)
-        longitude: -121.9552,
+        latitude: 37.4221, // Campbell, CA (user's location from instructions)
+        longitude: -121.9624,
         userId: "UNASSIGNED", // 🎯 Available for later claiming
         apiKey: apiKey, // Store the API key Arduino is using
         isOnline: false,
