@@ -57,7 +57,7 @@ export default function RegisterPage() {
       } else {
         window.location.href = "/";
       }
-    } catch (e) {
+    } catch {
       setErr("Network error");
     } finally {
       setLoading(false);
