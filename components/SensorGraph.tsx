@@ -1,5 +1,5 @@
 // components/SensorGraph.tsx
-// FIXED for new box structure
+// UPDATED to accept Arduino-native battery fields (lipVoltage/rtcBattery) while remaining backward compatible
 "use client";
 import React, { useState, useMemo } from "react";
 import {
@@ -14,7 +14,7 @@ import {
   Brush,
 } from "recharts";
 
-// Updated interfaces to match your sensors page structure
+// Reading shape now supports both legacy and Arduino-native battery fields
 interface Reading {
   moisture1: number;
   moisture2: number;
@@ -22,8 +22,11 @@ interface Reading {
   moisture4: number;
   temperature: number;
   humidity: number;
-  battery1: number;
-  battery2: number;
+  // Prefer Arduino names; keep legacy optional for backward compatibility
+  lipVoltage?: number; // LiPo battery voltage (V)
+  rtcBattery?: number; // RTC battery voltage (V)
+  battery1?: number; // legacy alias of lipVoltage
+  battery2?: number; // legacy alias of rtcBattery
   timestamp: string;
 }
 
@@ -47,16 +50,33 @@ interface SensorGraphProps {
   selectedBox: Box;
 }
 
-// Types for tooltip payload
-interface TooltipPayload {
+/** Strong type for chart rows so TS knows processedData’s shape */
+interface ChartReading {
+  timestamp: string;
+  time: string;
+  moisture1: number;
+  moisture2: number;
+  moisture3: number;
+  moisture4: number;
+  moistureAvg: number;
+  temperature: number;
+  humidity: number;
+  lipVoltage: number; // normalized LiPo (V)
+  rtcBattery: number; // normalized RTC (V)
+  batteryAvg: number;
+}
+
+// Types for tooltip payload (minimal shape we use)
+interface TooltipPayloadItem {
   color: string;
   name: string;
   value: number;
+  dataKey?: string;
 }
 
 interface CustomTooltipProps {
   active?: boolean;
-  payload?: TooltipPayload[];
+  payload?: TooltipPayloadItem[];
   label?: string;
 }
 
@@ -70,28 +90,30 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
     moistureAvg: true,
     temperature: true,
     humidity: true,
-    battery1: false, // Start with batteries hidden
+    battery1: false, // Keep toggle labels as-is; series will point to Arduino keys
     battery2: false,
   });
 
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
 
-  // Process data for the graph - FIXED to use sensors[0].readings
-  const processedData = useMemo(() => {
+  // Process data for the graph - use sensors[0].readings
+  const processedData = useMemo<ChartReading[]>(() => {
     if (!selectedBox?.sensors?.[0]?.readings) return [];
 
-    const readings = selectedBox.sensors[0].readings;
+    const readings = selectedBox.sensors[0].readings.slice(); // copy before sort
     let filteredReadings = readings;
 
     // Apply date filter if set
     if (dateRange.start) {
+      const start = new Date(dateRange.start);
       filteredReadings = filteredReadings.filter(
-        (reading) => new Date(reading.timestamp) >= new Date(dateRange.start)
+        (reading) => new Date(reading.timestamp) >= start
       );
     }
     if (dateRange.end) {
+      const end = new Date(dateRange.end);
       filteredReadings = filteredReadings.filter(
-        (reading) => new Date(reading.timestamp) <= new Date(dateRange.end)
+        (reading) => new Date(reading.timestamp) <= end
       );
     }
 
@@ -101,14 +123,17 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
         new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
-    return filteredReadings.map((reading) => {
+    return filteredReadings.map((reading): ChartReading => {
       const moistureAvg =
         (reading.moisture1 +
           reading.moisture2 +
           reading.moisture3 +
           reading.moisture4) /
         4;
-      const batteryAvg = (reading.battery1 + reading.battery2) / 2;
+
+      // Normalize batteries: prefer Arduino names, fall back to legacy
+      const lip = reading.lipVoltage ?? reading.battery1 ?? 0;
+      const rtc = reading.rtcBattery ?? reading.battery2 ?? 0;
 
       return {
         timestamp: new Date(reading.timestamp).toLocaleDateString(),
@@ -120,33 +145,38 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
         moisture2: reading.moisture2,
         moisture3: reading.moisture3,
         moisture4: reading.moisture4,
-        moistureAvg: moistureAvg,
+        moistureAvg,
         temperature: reading.temperature,
         humidity: reading.humidity,
-        battery1: reading.battery1,
-        battery2: reading.battery2,
-        batteryAvg: batteryAvg,
+        lipVoltage: lip,
+        rtcBattery: rtc,
+        batteryAvg: (lip + rtc) / 2,
       };
     });
   }, [selectedBox, dateRange]);
 
-  // Custom tooltip with proper TypeScript types
-  const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label }) => {
+  // Custom tooltip with unit-aware labels (typed, no any)
+  const CustomTooltip: React.FC<CustomTooltipProps> = ({
+    active,
+    payload,
+    label,
+  }) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-gray-800 border border-gray-600 rounded-lg p-3 shadow-lg">
           <p className="text-white font-medium">{`Time: ${label}`}</p>
-          {payload.map((entry: TooltipPayload, index: number) => (
-            <p key={index} style={{ color: entry.color }}>
-              {`${entry.name}: ${entry.value.toFixed(1)}${
-                entry.name.includes("Temperature")
-                  ? "°C"
-                  : entry.name.includes("Battery")
-                  ? "%"
-                  : "%"
-              }`}
-            </p>
-          ))}
+          {payload.map((entry, index) => {
+            const key = entry?.dataKey ?? "";
+            const isVolt = key === "lipVoltage" || key === "rtcBattery";
+            const isTemp = key === "temperature";
+            const unit = isVolt ? " V" : isTemp ? "°C" : "%";
+            const val = entry.value.toFixed(isVolt ? 2 : 1);
+            return (
+              <p key={index} style={{ color: entry.color }}>
+                {`${entry.name}: ${val}${unit}`}
+              </p>
+            );
+          })}
         </div>
       );
     }
@@ -158,7 +188,7 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
     setDateRange({ start: "", end: "" });
   };
 
-  // FIXED: Check if we have readings data
+  // Check if we have readings data
   if (!selectedBox || !selectedBox.sensors?.[0]?.readings?.length) {
     return (
       <div className="bg-[#0F111A] border border-gray-600 rounded-lg p-8 text-center">
@@ -299,7 +329,7 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
                 }
                 className="rounded bg-gray-700 border-gray-600"
               />
-              <span className="text-purple-400">Battery 1</span>
+              <span className="text-purple-400">Battery 1 (LiPo)</span>
             </label>
             <label className="flex items-center space-x-2 text-sm">
               <input
@@ -313,7 +343,7 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
                 }
                 className="rounded bg-gray-700 border-gray-600"
               />
-              <span className="text-pink-400">Battery 2</span>
+              <span className="text-pink-400">Battery 2 (RTC)</span>
             </label>
           </div>
         </div>
@@ -438,24 +468,24 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
               />
             )}
 
-            {/* Battery Lines */}
+            {/* Battery Lines (now use Arduino-native keys) */}
             {selectedMetrics.battery1 && (
               <Line
                 type="monotone"
-                dataKey="battery1"
+                dataKey="lipVoltage"
                 stroke="#8B5CF6"
                 strokeWidth={2}
-                name="Battery 1"
+                name="LiPo (V)"
                 dot={false}
               />
             )}
             {selectedMetrics.battery2 && (
               <Line
                 type="monotone"
-                dataKey="battery2"
+                dataKey="rtcBattery"
                 stroke="#A855F7"
                 strokeWidth={2}
-                name="Battery 2"
+                name="RTC (V)"
                 dot={false}
               />
             )}
@@ -470,52 +500,37 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
         <div className="bg-gray-800 rounded p-3">
           <h4 className="text-blue-400 font-medium">Moisture Range</h4>
           <p>
-            {processedData.length > 0 ? (
-              <>
-                {Math.min(...processedData.map((d) => d.moistureAvg)).toFixed(
+            {processedData.length > 0
+              ? `${Math.min(...processedData.map((d) => d.moistureAvg)).toFixed(
                   1
-                )}
-                % -
-                {Math.max(...processedData.map((d) => d.moistureAvg)).toFixed(
-                  1
-                )}
-                %
-              </>
-            ) : (
-              "No data"
-            )}
+                )}% - ${Math.max(
+                  ...processedData.map((d) => d.moistureAvg)
+                ).toFixed(1)}%`
+              : "No data"}
           </p>
         </div>
         <div className="bg-gray-800 rounded p-3">
           <h4 className="text-orange-400 font-medium">Temp Range</h4>
           <p>
-            {processedData.length > 0 ? (
-              <>
-                {Math.min(...processedData.map((d) => d.temperature)).toFixed(
+            {processedData.length > 0
+              ? `${Math.min(...processedData.map((d) => d.temperature)).toFixed(
                   1
-                )}
-                °C -
-                {Math.max(...processedData.map((d) => d.temperature)).toFixed(
-                  1
-                )}
-                °C
-              </>
-            ) : (
-              "No data"
-            )}
+                )}°C - ${Math.max(
+                  ...processedData.map((d) => d.temperature)
+                ).toFixed(1)}°C`
+              : "No data"}
           </p>
         </div>
         <div className="bg-gray-800 rounded p-3">
           <h4 className="text-green-400 font-medium">Humidity Range</h4>
           <p>
-            {processedData.length > 0 ? (
-              <>
-                {Math.min(...processedData.map((d) => d.humidity)).toFixed(1)}%
-                -{Math.max(...processedData.map((d) => d.humidity)).toFixed(1)}%
-              </>
-            ) : (
-              "No data"
-            )}
+            {processedData.length > 0
+              ? `${Math.min(...processedData.map((d) => d.humidity)).toFixed(
+                  1
+                )}% - ${Math.max(
+                  ...processedData.map((d) => d.humidity)
+                ).toFixed(1)}%`
+              : "No data"}
           </p>
         </div>
         <div className="bg-gray-800 rounded p-3">

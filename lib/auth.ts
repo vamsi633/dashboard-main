@@ -1,11 +1,23 @@
-// lib/auth.ts - Shared authentication configuration
+// lib/auth.ts - Shared authentication configuration (Google + Credentials)
 import GoogleProvider from "next-auth/providers/google";
+import CredentialsProvider from "next-auth/providers/credentials";
 import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import clientPromise from "@/lib/mongodb";
 import type { NextAuthOptions } from "next-auth";
+import bcrypt from "bcrypt";
+import { ObjectId } from "mongodb";
+
+interface DBUser {
+  _id: ObjectId;
+  email: string;
+  name?: string;
+  image?: string | null;
+  passwordHash?: string; // present only for credentials users or those who set a password
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
+    // Google OAuth (unchanged)
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
@@ -17,80 +29,113 @@ export const authOptions: NextAuthOptions = {
         },
       },
     }),
+
+    // Email + Password via Credentials provider
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        email: {
+          label: "Email",
+          type: "email",
+          placeholder: "you@example.com",
+        },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        // Narrow the credentials type safely
+        const { email, password } = (credentials ?? {}) as {
+          email?: string;
+          password?: string;
+        };
+
+        if (!email || !password) return null;
+
+        const client = await clientPromise;
+        const db = client.db("epiciot");
+        const users = db.collection<DBUser>("users");
+
+        const user = await users.findOne({ email: email.toLowerCase().trim() });
+        if (!user || !user.passwordHash) {
+          // user not found OR only has Google login (no password set yet)
+          return null;
+        }
+
+        const ok = await bcrypt.compare(password, user.passwordHash);
+        if (!ok) return null;
+
+        // Minimal user object for NextAuth
+        return {
+          id: user._id.toHexString(),
+          email: user.email,
+          name: user.name,
+          image: user.image ?? undefined,
+        };
+      },
+    }),
   ],
+
   adapter: MongoDBAdapter(clientPromise),
+
   session: {
-    strategy: "jwt", // Changed to JWT for better compatibility
+    strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
+
   secret: process.env.NEXTAUTH_SECRET,
-  debug: true, // Enable debug logs
+  debug: true,
+
   pages: {
     signIn: "/auth/signin",
     error: "/auth/error",
     newUser: "/",
   },
+
   callbacks: {
     async jwt({ token, user, account }) {
-      console.log("JWT Callback - user:", !!user, "account:", !!account);
-      // When user signs in for the first time
+      // On initial sign-in (Google or Credentials), attach user id
       if (account && user) {
-        console.log("New user login - User ID:", user.id);
-        return {
-          ...token,
-          accessToken: account.access_token,
-          userId: user.id, // Store the MongoDB user ID
-          sub: user.id, // Ensure sub is set to user ID
-        };
+        token.userId = user.id; // <- typed via next-auth.d.ts augmentation
+        token.sub = user.id;
+
+        // Keep access token for Google if present
+        if (account.provider === "google" && account.access_token) {
+          token.accessToken = account.access_token;
+        }
       }
-      // For subsequent requests, ensure userId is preserved
-      if (!token.userId && token.sub) {
-        token.userId = token.sub;
-      }
+      // Ensure userId persists on subsequent calls
+      if (!token.userId && token.sub) token.userId = token.sub;
       return token;
     },
+
     async session({ session, token }) {
-      console.log("Session Callback - token userId:", token.userId);
       if (session?.user && token) {
-        // Ensure the user ID is available in the session
         session.user.id = (token.userId || token.sub) as string;
-        // Log for debugging
-        console.log("Session user ID set to:", session.user.id);
       }
       return session;
     },
+
     async redirect({ url, baseUrl }) {
-      console.log("Redirect Callback - url:", url, "baseUrl:", baseUrl);
-      // Handle different redirect scenarios
-      if (url === `${baseUrl}/dashboard`) {
-        return baseUrl; // Redirect dashboard to home
-      }
-      // If the URL is relative, make it absolute
-      if (url.startsWith("/")) {
-        return `${baseUrl}${url}`;
-      }
-      // If URL is on the same domain, allow it
-      if (url.startsWith(baseUrl)) {
-        return url;
-      }
-      // Default to home page
+      if (url === `${baseUrl}/dashboard`) return baseUrl;
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      if (url.startsWith(baseUrl)) return url;
       return baseUrl;
     },
+
     async signIn({ user }) {
-      console.log("SignIn Callback - user:", user.email);
-      // Allow the sign in
+      console.log("SignIn Callback - user:", user?.email);
       return true;
     },
   },
+
   events: {
     async signIn(message) {
-      console.log("User signed in:", message.user.email);
+      console.log("User signed in:", message.user?.email);
     },
     async signOut() {
       console.log("User signed out");
     },
     async createUser(message) {
-      console.log("New user created:", message.user.email);
+      console.log("New user created:", message.user?.email);
     },
   },
 };
