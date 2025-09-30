@@ -82,32 +82,47 @@ export const authOptions: NextAuthOptions = {
   },
 
   callbacks: {
+    // Robust JWT: always use Mongo _id as userId/sub; backfill by email if needed
     async jwt({ token, user, account }) {
+      // Initial sign-in (Google or Credentials): we get a `user`
       if (account && user) {
-        const uid = (user as { id?: string })?.id;
-        if (uid) {
-          (token as { userId?: string }).userId = uid;
-          token.sub = uid;
-        }
-        // keep Google access token if present
+        const mongoId = typeof user.id === "string" ? user.id : String(user.id);
+        (token as { userId?: string }).userId = mongoId;
+        token.sub = mongoId; // normalize sub to Mongo _id
+
         const access = (account as { access_token?: string })?.access_token;
-        if (access) {
-          (token as { accessToken?: string }).accessToken = access;
+        if (access) (token as { accessToken?: string }).accessToken = access;
+        return token;
+      }
+
+      // Backfill for old tokens: resolve Mongo _id by email (if needed)
+      if (!(token as { userId?: string }).userId && token.email) {
+        const client = await clientPromise;
+        const db = client.db("epiciot");
+        const u = await db
+          .collection("users")
+          .findOne(
+            { email: token.email.toLowerCase() },
+            { projection: { _id: 1 } }
+          );
+        if (u?._id) {
+          const id = u._id.toString();
+          (token as { userId?: string }).userId = id;
+          token.sub = id;
         }
       }
-      if (!(token as { userId?: string }).userId && token.sub) {
-        (token as { userId?: string }).userId = token.sub;
-      }
+
+      // IMPORTANT: do NOT fall back to the original OAuth subject anymore
+      // (i.e., remove: if (!token.userId && token.sub) token.userId = token.sub)
+
       return token;
     },
 
+    // Session must expose Mongo _id as session.user.id
     async session({ session, token }) {
-      if (session?.user && token) {
-        const uid =
-          (token as { userId?: string; sub?: string }).userId ?? token.sub;
-        if (uid) {
-          (session.user as { id?: string }).id = uid;
-        }
+      const uid = (token as { userId?: string }).userId;
+      if (session?.user && uid) {
+        (session.user as { id?: string }).id = uid;
       }
       return session;
     },
