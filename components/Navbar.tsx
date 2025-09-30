@@ -81,10 +81,10 @@ const Navbar: React.FC = () => {
         >
           Home
         </Link>
-        {/* <Link
+       <Link
           href="/graphs"
           className="text-[#787d8f] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
-        > */}
+        > 
           Graphs
         </Link>
         <Link
