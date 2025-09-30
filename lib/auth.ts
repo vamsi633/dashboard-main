@@ -4,7 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import clientPromise from "@/lib/mongodb";
 import type { NextAuthOptions } from "next-auth";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { ObjectId } from "mongodb";
 
 interface DBUser {
@@ -17,7 +17,6 @@ interface DBUser {
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    // Google OAuth (unchanged)
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
@@ -29,8 +28,6 @@ export const authOptions: NextAuthOptions = {
         },
       },
     }),
-
-    // Email + Password via Credentials provider
     CredentialsProvider({
       name: "Credentials",
       credentials: {
@@ -42,12 +39,10 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        // Narrow the credentials type safely
         const { email, password } = (credentials ?? {}) as {
           email?: string;
           password?: string;
         };
-
         if (!email || !password) return null;
 
         const client = await clientPromise;
@@ -55,15 +50,11 @@ export const authOptions: NextAuthOptions = {
         const users = db.collection<DBUser>("users");
 
         const user = await users.findOne({ email: email.toLowerCase().trim() });
-        if (!user || !user.passwordHash) {
-          // user not found OR only has Google login (no password set yet)
-          return null;
-        }
+        if (!user || !user.passwordHash) return null;
 
         const ok = await bcrypt.compare(password, user.passwordHash);
         if (!ok) return null;
 
-        // Minimal user object for NextAuth
         return {
           id: user._id.toHexString(),
           email: user.email,
@@ -78,7 +69,7 @@ export const authOptions: NextAuthOptions = {
 
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 30 * 24 * 60 * 60,
   },
 
   secret: process.env.NEXTAUTH_SECRET,
@@ -92,24 +83,31 @@ export const authOptions: NextAuthOptions = {
 
   callbacks: {
     async jwt({ token, user, account }) {
-      // On initial sign-in (Google or Credentials), attach user id
       if (account && user) {
-        token.userId = user.id; // <- typed via next-auth.d.ts augmentation
-        token.sub = user.id;
-
-        // Keep access token for Google if present
-        if (account.provider === "google" && account.access_token) {
-          token.accessToken = account.access_token;
+        const uid = (user as { id?: string })?.id;
+        if (uid) {
+          (token as { userId?: string }).userId = uid;
+          token.sub = uid;
+        }
+        // keep Google access token if present
+        const access = (account as { access_token?: string })?.access_token;
+        if (access) {
+          (token as { accessToken?: string }).accessToken = access;
         }
       }
-      // Ensure userId persists on subsequent calls
-      if (!token.userId && token.sub) token.userId = token.sub;
+      if (!(token as { userId?: string }).userId && token.sub) {
+        (token as { userId?: string }).userId = token.sub;
+      }
       return token;
     },
 
     async session({ session, token }) {
       if (session?.user && token) {
-        session.user.id = (token.userId || token.sub) as string;
+        const uid =
+          (token as { userId?: string; sub?: string }).userId ?? token.sub;
+        if (uid) {
+          (session.user as { id?: string }).id = uid;
+        }
       }
       return session;
     },
