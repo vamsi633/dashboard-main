@@ -26,7 +26,7 @@ export default function InviteButton({
       });
       const json = await res.json();
       setResult(json);
-    } catch (e) {
+    } catch {
       setResult({ error: "Request failed" });
     } finally {
       setLoading(false);
