@@ -183,7 +183,7 @@ export default function Home() {
       } else {
         alert(`❌ Error: ${data.error}`);
       }
-    } catch (e) {
+    } catch {
       alert("❌ Error claiming device. Please try again.");
     } finally {
       setClaiming(false);
