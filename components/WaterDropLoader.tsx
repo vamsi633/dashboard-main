@@ -1,142 +1,158 @@
-// components/WaterDropLoader.tsx
 "use client";
-
-import { motion } from "framer-motion";
+import React from "react";
 
 export default function WaterDropLoader() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0F111A] via-[#121624] to-[#121624] flex items-center justify-center">
-      <div className="relative">
-        {/* Water drop container */}
-        <div className="relative w-32 h-32">
-          {/* Outer drop shape */}
-          <motion.svg
-            width="128"
-            height="128"
-            viewBox="0 0 128 128"
-            className="absolute inset-0"
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.5 }}
-          >
-            {/* Drop shape path */}
-            <path
-              d="M64 16C64 16 32 48 32 80C32 97.6731 46.3269 112 64 112C81.6731 112 96 97.6731 96 80C96 48 64 16 64 16Z"
-              fill="none"
-              stroke="#9ba8f4"
-              strokeWidth="2"
-              className="drop-shadow-lg"
-            />
+    <div className="loader-overlay" role="status" aria-label="Loading">
+      <svg
+        className="plant"
+        viewBox="0 0 360 300"
+        preserveAspectRatio="xMidYMid meet"
+        aria-hidden="true"
+      >
+        {/* soft shadow halo (moved down to stay under the pot) */}
+        <ellipse
+          cx="180"
+          cy="170"
+          rx="130"
+          ry="80"
+          fill="#000"
+          opacity="0.05"
+        />
 
-            {/* Inner fill animation */}
-            <motion.path
-              d="M64 16C64 16 32 48 32 80C32 97.6731 46.3269 112 64 112C81.6731 112 96 97.6731 96 80C96 48 64 16 64 16Z"
-              fill="url(#water-gradient)"
-              initial={{ pathLength: 0, opacity: 0 }}
-              animate={{ pathLength: 1, opacity: 1 }}
-              transition={{
-                pathLength: { duration: 2, ease: "easeInOut" },
-                opacity: { duration: 0.5 },
-              }}
-              style={{
-                clipPath: "url(#water-fill)",
-              }}
-            />
+        {/* LEAVES (nudged down) */}
+        <g transform="translate(180,160)">
+          {" "}
+          {/* ↑ was 138 */}
+          <path
+            className="leaf leaf-sway-a"
+            d="M-10,0 C-32,-90 -12,-140 24,-170 C-44,-142 -76,-88 -40,-8 Z"
+            fill="#A8E06E"
+            stroke="#97D25E"
+            strokeWidth="3"
+          />
+          <path
+            className="leaf leaf-sway-b"
+            d="M0,0 C12,-95 30,-150 64,-170 C-6,-150 -26,-90 -4,-6 Z"
+            fill="#A8E06E"
+            stroke="#97D25E"
+            strokeWidth="3"
+          />
+          <path
+            className="leaf leaf-sway-c"
+            d="M12,0 C44,-56 92,-78 128,-78 C74,-74 48,-38 16,0 Z"
+            fill="#A8E06E"
+            stroke="#97D25E"
+            strokeWidth="3"
+          />
+          <path
+            className="leaf leaf-sway-d"
+            d="M-30,0 C-58,-46 -66,-70 -62,-88 C-54,-64 -36,-40 -16,0 Z"
+            fill="#9EDB64"
+            stroke="#8DCA54"
+            strokeWidth="3"
+          />
+        </g>
 
-            {/* Gradient definition */}
-            <defs>
-              <linearGradient
-                id="water-gradient"
-                x1="0%"
-                y1="0%"
-                x2="0%"
-                y2="100%"
-              >
-                <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.8" />
-                <stop offset="100%" stopColor="#3b82f6" stopOpacity="1" />
-              </linearGradient>
+        {/* POT (nudged down to match) */}
+        <g transform="translate(180,158)">
+          {" "}
+          {/* ↑ was 136 */}
+          <rect x="-100" y="0" width="200" height="36" fill="#D5BF9B" />
+          <polygon points="-70,36 70,36 40,88 -40,88" fill="#CCB38E" />
+          <polygon
+            points="-100,0 -40,0 -80,36 -100,36"
+            fill="#C9AE84"
+            opacity=".95"
+          />
+          <polygon
+            points="100,0 40,0 80,36 100,36"
+            fill="#C9AE84"
+            opacity=".95"
+          />
+        </g>
+      </svg>
 
-              {/* Animated clip path for water fill effect */}
-              <clipPath id="water-fill">
-                <motion.rect
-                  x="32"
-                  y="112"
-                  width="64"
-                  height="96"
-                  initial={{ y: 112 }}
-                  animate={{ y: 16 }}
-                  transition={{
-                    duration: 2,
-                    ease: "easeInOut",
-                    repeat: Infinity,
-                    repeatType: "reverse",
-                  }}
-                />
-              </clipPath>
-            </defs>
-          </motion.svg>
+      <style jsx>{`
+        .loader-overlay {
+          position: fixed;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #fff;
+          z-index: 9999;
+        }
 
-          {/* Water ripple effect */}
-          <motion.div
-            className="absolute inset-0 flex items-center justify-center"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-          >
-            <motion.div
-              className="w-16 h-16 rounded-full bg-blue-400/20"
-              animate={{
-                scale: [1, 1.5, 1],
-                opacity: [0.5, 0.2, 0.5],
-              }}
-              transition={{
-                duration: 6,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-            />
-          </motion.div>
+        /* Responsive, with a touch of extra room and visible overflow just in case */
+        .plant {
+          width: clamp(180px, 24vh, 280px); /* a hair taller overall */
+          height: auto;
+          overflow: visible;
+        }
 
-          {/* Inner shimmer effect */}
-          <motion.div
-            className="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
-            animate={{
-              opacity: [0.3, 0.7, 0.3],
-              scale: [0.8, 1, 0.8],
-            }}
-            transition={{
-              duration: 1.5,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-          >
-            <div className="w-4 h-4 rounded-full bg-white/30 blur-sm" />
-          </motion.div>
-        </div>
+        .leaf {
+          transform-origin: 0% 100%;
+        }
 
-        {/* Loading text */}
-        <motion.div
-          className="mt-8 text-center"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <h2 className="text-xl font-semibold text-white mb-2">
-            Initializing Dashboard
-          </h2>
-          <motion.p
-            className="text-gray-400 text-sm"
-            animate={{ opacity: [0.5, 1, 0.5] }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-          >
-            Preparing your sensor data...
-          </motion.p>
-        </motion.div>
-      </div>
+        .leaf-sway-a {
+          animation: swayA 3.2s ease-in-out infinite;
+        }
+        .leaf-sway-b {
+          animation: swayB 3.6s ease-in-out infinite;
+        }
+        .leaf-sway-c {
+          animation: swayC 3s ease-in-out infinite;
+        }
+        .leaf-sway-d {
+          animation: swayD 2.8s ease-in-out infinite;
+        }
+
+        @keyframes swayA {
+          0% {
+            transform: rotate(-2deg);
+          }
+          50% {
+            transform: rotate(3deg);
+          }
+          100% {
+            transform: rotate(-2deg);
+          }
+        }
+        @keyframes swayB {
+          0% {
+            transform: rotate(2deg);
+          }
+          50% {
+            transform: rotate(-3deg);
+          }
+          100% {
+            transform: rotate(2deg);
+          }
+        }
+        @keyframes swayC {
+          0% {
+            transform: rotate(1deg);
+          }
+          50% {
+            transform: rotate(-2deg);
+          }
+          100% {
+            transform: rotate(1deg);
+          }
+        }
+        @keyframes swayD {
+          0% {
+            transform: rotate(0deg);
+          }
+          50% {
+            transform: rotate(2deg);
+          }
+          100% {
+            transform: rotate(0deg);
+          }
+        }
+      `}</style>
     </div>
   );
 }

@@ -61,7 +61,7 @@ const Navbar: React.FC = () => {
     )}&background=5b21b6&color=fff&size=96`;
 
   return (
-    <nav className="fixed top-0 left-0 z-50 w-full h-[90px] bg-[#0F111A] text-[#D9DFF2] flex justify-between items-center shadow-lg px-6 sm:px-10 md:px-16 lg:px-24 xl:px-32 2xl:px-48">
+    <nav className="fixed top-0 left-0 z-50 w-full h-[90px] bg-[#02142ced] text-[#D9DFF2] flex justify-between items-center shadow-lg px-6 sm:px-10 md:px-16 lg:px-24 xl:px-32 2xl:px-48">
       {/* Logo on the left */}
       <div className="flex items-center">
         <Image
@@ -77,31 +77,31 @@ const Navbar: React.FC = () => {
       <div className="hidden md:flex flex-1 justify-center space-x-8">
         <Link
           href="/"
-          className="text-[#787d8f] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
+          className="text-[#FFFFFF] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
         >
           Home
         </Link>
-       <Link
+        <Link
           href="/graphs"
-          className="text-[#787d8f] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
-        > 
+          className="text-[#FFFFFF] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
+        >
           Graphs
         </Link>
         <Link
           href="/sensors"
-          className="text-[#787d8f] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
+          className="text-[#FFFFFF] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
         >
           Sensors
         </Link>
         <Link
           href="/settings"
-          className="text-[#787d8f] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
+          className="text-[#FFFFFF] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
         >
           Settings
         </Link>
         <Link
           href="/announcements"
-          className="text-[#787d8f] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
+          className="text-[#FFFFFF] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
         >
           Announcements
         </Link>
@@ -110,7 +110,7 @@ const Navbar: React.FC = () => {
       {/* Right side: Notification, Profile, and Mobile Menu Toggle */}
       <div className="flex items-center space-x-4">
         <button className="relative focus:outline-none">
-          <BellIcon className="h-8 w-8 text-[#D9DFF2] hover:text-gray-300 transition-colors stroke-2 fill-current" />
+          <BellIcon className="h-8 w-8 text-[#FFFFFF] hover:text-gray-300 transition-colors stroke-2 fill-current" />
           <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
             3
           </span>
@@ -130,7 +130,7 @@ const Navbar: React.FC = () => {
             )}
           </button>
           {isDropdownOpen && (
-            <div className="absolute right-0 mt-2 w-64 bg-[#0F111A] rounded-lg shadow-lg py-2 px-2 z-50 border border-[#9CA3AF]">
+            <div className="absolute right-0 mt-2 w-64 bg-[#02142ced] rounded-lg shadow-lg py-2 px-2 z-50 border border-[#9CA3AF]">
               <div className="px-3 py-3 border-b border-gray-700">
                 <div className="text-white font-medium truncate">
                   {userName}

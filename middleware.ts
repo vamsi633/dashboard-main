@@ -1,38 +1,17 @@
+// middleware.ts
 import { withAuth } from "next-auth/middleware";
-import { NextResponse } from "next/server";
+import type { JWT } from "next-auth/jwt";
 
-export default withAuth(
-  function middleware(req) {
-    console.log("Middleware - token:", req.nextauth.token);
-    return NextResponse.next();
+export default withAuth(() => {}, {
+  pages: { signIn: "/auth/signin" },
+  callbacks: {
+    authorized: ({ token }: { token?: JWT | null }) => !!token, // require auth for matched routes
   },
-  {
-    callbacks: {
-      authorized: ({ token, req }) => {
-        console.log(
-          "Authorized check - token:",
-          !!token,
-          "path:",
-          req.nextUrl.pathname
-        );
-        return !!token;
-      },
-    },
-  }
-);
+});
 
-// Updated matcher to exclude IoT endpoints
+// Protect everything except auth endpoints, device ingest, assets, AND /admin/**
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - /api/auth/* (auth endpoints)
-     * - /api/iot/* (IoT endpoints) ← ADDED THIS
-     * - /auth/* (auth pages)
-     * - /_next/static (static files)
-     * - /_next/image (image optimization files)
-     * - /favicon.ico (favicon file)
-     */
-    "/((?!api/auth|api/iot|auth|_next/static|_next/image|favicon.ico).*)",
+    "/((?!api/auth|api/iot|auth|_next/|stems/|images/|fonts/|favicon.ico|robots.txt|sitemap.xml|admin).*)",
   ],
 };

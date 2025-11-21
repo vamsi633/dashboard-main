@@ -164,25 +164,22 @@ const convertApiDataToBoxFormat = (apiBoxes: ApiBox[]): SensorData => {
 };
 
 // Hook to fetch data from API
-const useSensorData = (): UseSensorDataReturn => {
+const useSensorData = (enabled: boolean): UseSensorDataReturn => {
   const [sensorData, setSensorData] = useState<SensorData>({ boxes: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = async (): Promise<void> => {
+    if (!enabled) return; // ← don't fetch until allowed
     try {
       setError(null);
       const response = await fetch("/api/dashboard/devices");
-
-      if (!response.ok) {
+      if (!response.ok)
         throw new Error(`HTTP error! status: ${response.status}`);
-      }
 
       const data: ApiResponse = await response.json();
-
       if (data.success && data.boxes) {
-        const convertedData = convertApiDataToBoxFormat(data.boxes);
-        setSensorData(convertedData);
+        setSensorData(convertApiDataToBoxFormat(data.boxes));
       } else {
         setError(data.error || "Failed to fetch sensor data");
         setSensorData({ boxes: [] });
@@ -199,10 +196,12 @@ const useSensorData = (): UseSensorDataReturn => {
   };
 
   useEffect(() => {
+    if (!enabled) return; // ← guard
+    setLoading(true);
     fetchData();
-    const interval = setInterval(fetchData, 30000); // Refresh every 30 seconds
+    const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [enabled]); // ← refetch when enabled flips to true
 
   return { sensorData, loading, error };
 };
@@ -217,8 +216,7 @@ export default function SensorsPage() {
     sensorData,
     loading: dataLoading,
     error: dataError,
-  } = useSensorData();
-
+  } = useSensorData(status === "authenticated");
   // Set the first box as default when component mounts, but preserve user selection
   useEffect(() => {
     if (sensorData.boxes && sensorData.boxes.length > 0) {
@@ -348,9 +346,7 @@ export default function SensorsPage() {
   }, [selectedBox]);
 
   // Show loader while checking authentication or loading data
-  if (status === "loading" || dataLoading) {
-    return <WaterDropLoader />;
-  }
+  if (status === "loading" || dataLoading) return <WaterDropLoader />;
 
   if (!session) {
     return null;

@@ -1,7 +1,16 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Lato } from "next/font/google";
 import "./globals.css";
+
 import { AuthProvider } from "@/providers/auth-provider";
+
+const lato = Lato({
+  subsets: ["latin"],
+  weight: ["300", "400", "700"],
+  // expose a CSS variable so Tailwind can use it as `font-lato`
+  variable: "--font-lato",
+});
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,13 +29,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={[
+          geistSans.variable,
+          geistMono.variable,
+          lato.variable, // ← add this line
+          "antialiased",
+        ].join(" ")}
       >
         <AuthProvider>{children}</AuthProvider>
       </body>

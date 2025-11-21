@@ -24,6 +24,11 @@ module.exports = {
       },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui"],
+        // Use Lato anywhere via `font-lato`
+        lato: ["var(--font-lato)", "sans-serif"],
+        // (optional) reference Geist if you want a utility for it too
+        geist: ["var(--font-geist-sans)", "system-ui", "sans-serif"],
+        mono: ["var(--font-geist-mono)", "monospace"],
       },
     },
   },
