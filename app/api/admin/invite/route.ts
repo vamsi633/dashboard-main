@@ -63,7 +63,7 @@ export async function POST(req: Request) {
   const base =
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.NEXTAUTH_URL ||
-    "http://localhost:3000";
+    "https://dashboard-main-nu.vercel.app";
 
   const inviteUrl = `${base}/auth/invite?token=${encodeURIComponent(
     token
