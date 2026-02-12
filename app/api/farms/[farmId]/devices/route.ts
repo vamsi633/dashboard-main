@@ -21,7 +21,7 @@ type DeviceOut = {
 
 export async function GET(
   _req: NextRequest,
-  ctx: { params: { farmId: string } }
+  { params }: { params: Promise<{ farmId: string }> }
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -31,7 +31,8 @@ export async function GET(
     );
   }
 
-  const farmId = ctx.params.farmId;
+  const { farmId } = await params;
+
   if (!ObjectId.isValid(farmId)) {
     return NextResponse.json(
       { ok: false, error: "Invalid farm id" },
@@ -84,7 +85,7 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  ctx: { params: { farmId: string } }
+  { params }: { params: Promise<{ farmId: string }> }
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -94,7 +95,8 @@ export async function POST(
     );
   }
 
-  const farmId = ctx.params.farmId;
+  const { farmId } = await params;
+
   if (!ObjectId.isValid(farmId)) {
     return NextResponse.json(
       { ok: false, error: "Invalid farm id" },
@@ -160,15 +162,9 @@ export async function POST(
   }
 
   // 4) Assign farmId
-  await db.collection("iot_devices").updateOne(
-    { deviceId },
-    {
-      $set: {
-        farmId,
-        updatedAt: new Date(),
-      },
-    }
-  );
+  await db
+    .collection("iot_devices")
+    .updateOne({ deviceId }, { $set: { farmId, updatedAt: new Date() } });
 
   return NextResponse.json({ ok: true });
 }
