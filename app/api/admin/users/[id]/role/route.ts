@@ -1,19 +1,15 @@
-// app/api/admin/users/[id]/route.ts
+// app/api/admin/users/[id]/role/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { setUserRole, deleteUserAndDevices, type Role } from "@/lib/users";
+import { setUserRole, type Role } from "@/lib/users";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * PATCH /api/admin/users/:id/role
- * Body: { role: "admin" | "user" }
- */
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
   if (!session || session.user?.role !== "admin") {
@@ -23,7 +19,7 @@ export async function PATCH(
     );
   }
 
-  const userId = params.id;
+  const { id: userId } = await params;
   if (!userId) {
     return NextResponse.json(
       { ok: false, error: "Missing user id" },
@@ -51,62 +47,11 @@ export async function PATCH(
 
   try {
     await setUserRole(userId, role);
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
     console.error("Error updating user role:", error);
     return NextResponse.json(
       { ok: false, error: "Failed to update role" },
-      { status: 500 }
-    );
-  }
-}
-
-/**
- * DELETE /api/admin/users/:id
- * Deletes the user + any devices they claimed.
- */
-export async function DELETE(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
-  const session = await getServerSession(authOptions);
-  if (!session || session.user?.role !== "admin") {
-    return NextResponse.json(
-      { ok: false, error: "Forbidden" },
-      { status: 403 }
-    );
-  }
-
-  const userId = params.id;
-  if (!userId) {
-    return NextResponse.json(
-      { ok: false, error: "Missing user id" },
-      { status: 400 }
-    );
-  }
-
-  try {
-    const { deletedUser, deletedDevices } = await deleteUserAndDevices(userId);
-
-    if (!deletedUser) {
-      return NextResponse.json(
-        { ok: false, error: "User not found" },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json(
-      {
-        ok: true,
-        deletedUser,
-        deletedDevices,
-      },
-      { status: 200 }
-    );
-  } catch (error) {
-    console.error("Error deleting user:", error);
-    return NextResponse.json(
-      { ok: false, error: "Failed to delete user" },
       { status: 500 }
     );
   }

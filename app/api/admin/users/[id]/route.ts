@@ -4,16 +4,14 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { deleteUserAndDevices } from "@/lib/users";
 
-/**
- * DELETE /api/admin/users/:id
- * Only admins can call this.
- */
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function DELETE(
-  _req: Request,
-  props: { params: Promise<{ id: string }> }
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
-
   if (!session || session.user?.role !== "admin") {
     return NextResponse.json(
       { ok: false, error: "Forbidden" },
@@ -21,17 +19,16 @@ export async function DELETE(
     );
   }
 
-  const { id } = await props.params;
-
-  if (!id) {
+  const { id: userId } = await params;
+  if (!userId) {
     return NextResponse.json(
-      { ok: false, error: "Missing id" },
+      { ok: false, error: "Missing user id" },
       { status: 400 }
     );
   }
 
   try {
-    const { deletedUser, deletedDevices } = await deleteUserAndDevices(id);
+    const { deletedUser, deletedDevices } = await deleteUserAndDevices(userId);
 
     if (!deletedUser) {
       return NextResponse.json(
@@ -41,15 +38,11 @@ export async function DELETE(
     }
 
     return NextResponse.json(
-      {
-        ok: true,
-        deletedUser,
-        deletedDevices,
-      },
+      { ok: true, deletedUser, deletedDevices },
       { status: 200 }
     );
   } catch (error) {
-    console.error("Delete user error:", error);
+    console.error("Error deleting user:", error);
     return NextResponse.json(
       { ok: false, error: "Failed to delete user" },
       { status: 500 }
