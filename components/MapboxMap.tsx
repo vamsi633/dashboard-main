@@ -1,9 +1,15 @@
 "use client";
-import React, { useEffect, useRef, useState, useCallback } from "react";
+
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
-// Updated interfaces to match Arduino data structure
 interface SensorMarker {
   id: string;
   name: string;
@@ -26,7 +32,6 @@ interface GeoJSONFeature {
   type: "Feature";
   properties: {
     description: string;
-    status?: string;
     markerType?: "device" | "sensor";
   };
   geometry: {
@@ -49,11 +54,14 @@ interface MapboxMapProps {
   className?: string;
 }
 
-// Mapbox access token
+// Mapbox token
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAP_BOX_ACCESS_KEY || "";
 
+const SOURCE_ID = "sensors";
+const LAYER_ID = "sensor-circles";
+
 const MapboxMap: React.FC<MapboxMapProps> = ({
-  sensors,
+  sensors = [],
   center,
   zoom = 15,
   height = "500px",
@@ -62,371 +70,362 @@ const MapboxMap: React.FC<MapboxMapProps> = ({
 }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+
+  const popupRef = useRef<mapboxgl.Popup | null>(null);
+  const labelMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const handlersBoundRef = useRef(false);
+
   const [mapLoaded, setMapLoaded] = useState(false);
-  const [styleLoaded, setStyleLoaded] = useState(false); // ✅ Track style loading separately
   const [mapError, setMapError] = useState<string | null>(null);
 
-  // Create popup content with updated Arduino data structure
+  const initialCenter = useMemo<[number, number]>(() => {
+    if (center) return center;
+    if (sensors.length > 0) return sensors[0].coordinates;
+    return [-121.901782, 36.837007];
+  }, [center, sensors]);
+
   const createPopupContent = useCallback((sensor: SensorMarker): string => {
+    const d = sensor.data;
     return `
       <div style="
         color: white;
         padding: 12px 16px;
         font-family: Arial, sans-serif;
         border-radius: 8px;
-        max-width: 300px;
+        max-width: 320px;
         background: #0f111a;
       ">
-        <h3 style="margin: 0 0 8px 0; font-size: 16px; color: #3B82F6;">${
-          sensor.name
-        }</h3>
+        <h3 style="margin: 0 0 8px 0; font-size: 16px; color: #3B82F6;">
+          ${sensor.name}
+        </h3>
+
         ${
-          sensor.data
+          d
             ? `
-            <div style="margin: 8px 0;">
-              ${
-                sensor.data.moisture !== undefined
-                  ? `
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <span style="color: #D1D5DB; font-size: 12px;">💧 Overall Moisture:</span>
-                    <span style="color: #10B981; font-weight: 600; font-size: 12px;">${sensor.data.moisture.toFixed(
+          <div style="margin: 8px 0;">
+            ${
+              d.moisture !== undefined
+                ? `<div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                    <span style="color:#D1D5DB;font-size:12px;">💧 Overall Moisture:</span>
+                    <span style="color:#10B981;font-weight:600;font-size:12px;">${d.moisture.toFixed(
                       1
                     )}%</span>
-                  </div>
-                  `
-                  : ""
-              }
-              ${
-                sensor.data.moisture1 !== undefined
-                  ? `
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <span style="color: #D1D5DB; font-size: 12px;">💧 Moisture 1:</span>
-                    <span style="color: #10B981; font-weight: 600; font-size: 12px;">${sensor.data.moisture1.toFixed(
-                      1
-                    )}%</span>
-                  </div>
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <span style="color: #D1D5DB; font-size: 12px;">💧 Moisture 2:</span>
-                    <span style="color: #10B981; font-weight: 600; font-size: 12px;">${(
-                      sensor.data.moisture2 || 0
-                    ).toFixed(1)}%</span>
-                  </div>
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <span style="color: #D1D5DB; font-size: 12px;">💧 Moisture 3:</span>
-                    <span style="color: #10B981; font-weight: 600; font-size: 12px;">${(
-                      sensor.data.moisture3 || 0
-                    ).toFixed(1)}%</span>
-                  </div>
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <span style="color: #D1D5DB; font-size: 12px;">💧 Moisture 4:</span>
-                    <span style="color: #10B981; font-weight: 600; font-size: 12px;">${(
-                      sensor.data.moisture4 || 0
-                    ).toFixed(1)}%</span>
-                  </div>
-                  `
-                  : ""
-              }
-              ${
-                sensor.data.temperature !== undefined
-                  ? `
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <span style="color: #D1D5DB; font-size: 12px;">🌡️ Temperature:</span>
-                    <span style="color: #F59E0B; font-weight: 600; font-size: 12px;">${sensor.data.temperature}°C</span>
-                  </div>
-                  `
-                  : ""
-              }
-              ${
-                sensor.data.humidity !== undefined
-                  ? `
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <span style="color: #D1D5DB; font-size: 12px;">💨 Humidity:</span>
-                    <span style="color: #06B6D4; font-weight: 600; font-size: 12px;">${sensor.data.humidity}%</span>
-                  </div>
-                  `
-                  : ""
-              }
-              ${
-                sensor.data.lipVoltage !== undefined &&
-                sensor.data.rtcBattery !== undefined
-                  ? `
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <span style="color: #D1D5DB; font-size: 12px;">🔋 LiPo Battery:</span>
-                    <span style="color: #8B5CF6; font-weight: 600; font-size: 12px;">${sensor.data.lipVoltage}V</span>
-                  </div>
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <span style="color: #D1D5DB; font-size: 12px;">🔋 RTC Battery:</span>
-                    <span style="color: #8B5CF6; font-weight: 600; font-size: 12px;">${sensor.data.rtcBattery}V</span>
-                  </div>
-                  `
-                  : ""
-              }
-              ${
-                sensor.data.dataPoints !== undefined
-                  ? `
-                  <div style="display: flex; justify-content: space-between;">
-                    <span style="color: #D1D5DB; font-size: 12px;">📊 Data Points:</span>
-                    <span style="color: #06B6D4; font-weight: 600; font-size: 12px;">${sensor.data.dataPoints}</span>
-                  </div>
-                  `
-                  : ""
-              }
-            </div>
-            `
-            : '<div style="color: #EF4444;">No data available</div>'
+                  </div>`
+                : ""
+            }
+
+            ${
+              d.moisture1 !== undefined
+                ? `
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                  <span style="color:#D1D5DB;font-size:12px;">💧 Moisture 1:</span>
+                  <span style="color:#10B981;font-weight:600;font-size:12px;">${d.moisture1.toFixed(
+                    1
+                  )}%</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                  <span style="color:#D1D5DB;font-size:12px;">💧 Moisture 2:</span>
+                  <span style="color:#10B981;font-weight:600;font-size:12px;">${(
+                    d.moisture2 ?? 0
+                  ).toFixed(1)}%</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                  <span style="color:#D1D5DB;font-size:12px;">💧 Moisture 3:</span>
+                  <span style="color:#10B981;font-weight:600;font-size:12px;">${(
+                    d.moisture3 ?? 0
+                  ).toFixed(1)}%</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                  <span style="color:#D1D5DB;font-size:12px;">💧 Moisture 4:</span>
+                  <span style="color:#10B981;font-weight:600;font-size:12px;">${(
+                    d.moisture4 ?? 0
+                  ).toFixed(1)}%</span>
+                </div>
+              `
+                : ""
+            }
+
+            ${
+              d.temperature !== undefined
+                ? `<div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                    <span style="color:#D1D5DB;font-size:12px;">🌡️ Temperature:</span>
+                    <span style="color:#F59E0B;font-weight:600;font-size:12px;">${d.temperature}°C</span>
+                  </div>`
+                : ""
+            }
+
+            ${
+              d.humidity !== undefined
+                ? `<div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                    <span style="color:#D1D5DB;font-size:12px;">💨 Humidity:</span>
+                    <span style="color:#06B6D4;font-weight:600;font-size:12px;">${d.humidity}%</span>
+                  </div>`
+                : ""
+            }
+
+            ${
+              d.lipVoltage !== undefined
+                ? `<div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                    <span style="color:#D1D5DB;font-size:12px;">🔋 LiPo Battery:</span>
+                    <span style="color:#8B5CF6;font-weight:600;font-size:12px;">${d.lipVoltage}V</span>
+                  </div>`
+                : ""
+            }
+
+            ${
+              d.rtcBattery !== undefined
+                ? `<div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                    <span style="color:#D1D5DB;font-size:12px;">🔋 RTC Battery:</span>
+                    <span style="color:#8B5CF6;font-weight:600;font-size:12px;">${d.rtcBattery}V</span>
+                  </div>`
+                : ""
+            }
+
+            ${
+              d.dataPoints !== undefined
+                ? `<div style="display:flex;justify-content:space-between;">
+                    <span style="color:#D1D5DB;font-size:12px;">📊 Data Points:</span>
+                    <span style="color:#06B6D4;font-weight:600;font-size:12px;">${d.dataPoints}</span>
+                  </div>`
+                : ""
+            }
+          </div>
+        `
+            : `<div style="color:#EF4444;">No data available</div>`
         }
       </div>
     `;
   }, []);
 
-  // ✅ FIXED: Only add markers when both map AND style are loaded
-  const addMarkersToMap = useCallback(
-    (map: mapboxgl.Map): void => {
-      // ✅ Critical fix: Check if style is loaded before proceeding
-      if (!map.isStyleLoaded()) {
-        console.log("⏳ Style not loaded yet, waiting...");
-        return;
-      }
+  const clearLabelMarkers = useCallback(() => {
+    for (const m of labelMarkersRef.current) {
+      m.remove();
+    }
+    labelMarkersRef.current = [];
+  }, []);
 
+  const setGeoJsonData = useCallback(
+    (map: mapboxgl.Map) => {
+      // if no sensors -> remove layers/source
       if (!sensors || sensors.length === 0) {
-        // Clear existing markers if no sensors
-        if (map.getSource("sensors")) {
-          try {
-            map.removeLayer("sensor-circles");
-            map.removeSource("sensors");
-          } catch {
-            console.log("No markers to remove");
-          }
+        clearLabelMarkers();
+
+        if (map.getLayer(LAYER_ID)) {
+          map.removeLayer(LAYER_ID);
+        }
+        if (map.getSource(SOURCE_ID)) {
+          map.removeSource(SOURCE_ID);
         }
         return;
       }
 
-      console.log(`📍 Adding ${sensors.length} markers to map`);
+      const features: GeoJSONFeature[] = sensors.map((sensor) => ({
+        type: "Feature",
+        properties: {
+          description: createPopupContent(sensor),
+          markerType: "sensor",
+        },
+        geometry: { type: "Point", coordinates: sensor.coordinates },
+      }));
 
-      try {
-        // Create GeoJSON features
-        const features: GeoJSONFeature[] = sensors.map((sensor) => ({
-          type: "Feature",
-          properties: {
-            description: createPopupContent(sensor),
-            markerType: "sensor",
+      const data: GeoJSONData = { type: "FeatureCollection", features };
+
+      const existingSource = map.getSource(SOURCE_ID);
+      if (existingSource) {
+        (existingSource as mapboxgl.GeoJSONSource).setData(data);
+      } else {
+        map.addSource(SOURCE_ID, { type: "geojson", data });
+
+        map.addLayer({
+          id: LAYER_ID,
+          type: "circle",
+          source: SOURCE_ID,
+          paint: {
+            "circle-radius": 10,
+            "circle-color": "#3B82F6",
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#FFFFFF",
           },
-          geometry: {
-            type: "Point",
-            coordinates: sensor.coordinates,
-          },
-        }));
+        });
+      }
 
-        const geojsonData: GeoJSONData = {
-          type: "FeatureCollection",
-          features: features,
-        };
+      // bind hover handlers once
+      if (!handlersBoundRef.current) {
+        handlersBoundRef.current = true;
 
-        // Update existing source or create new one
-        if (map.getSource("sensors")) {
-          (map.getSource("sensors") as mapboxgl.GeoJSONSource).setData(
-            geojsonData
-          );
-          console.log("🔄 Updated existing markers");
-        } else {
-          // First time - add source and layer
-          map.addSource("sensors", {
-            type: "geojson",
-            data: geojsonData,
-          });
+        popupRef.current = new mapboxgl.Popup({
+          closeButton: false,
+          closeOnClick: false,
+        });
 
-          // Add circles for sensors
-          map.addLayer({
-            id: "sensor-circles",
-            type: "circle",
-            source: "sensors",
-            paint: {
-              "circle-radius": 10,
-              "circle-color": "#3B82F6",
-              "circle-stroke-width": 2,
-              "circle-stroke-color": "#FFFFFF",
-            },
-          });
+        map.on("mouseenter", LAYER_ID, (e) => {
+          map.getCanvas().style.cursor = "pointer";
+          const feature = e.features?.[0];
+          if (!feature) return;
 
-          // Add popup on hover
-          const popup = new mapboxgl.Popup({
-            closeButton: false,
-            closeOnClick: false,
-          });
+          if (feature.geometry?.type !== "Point") return;
 
-          map.on("mouseenter", "sensor-circles", (e) => {
-            map.getCanvas().style.cursor = "pointer";
-            if (e.features && e.features[0]) {
-              const feature = e.features[0];
-              if (feature.geometry && feature.geometry.type === "Point") {
-                const pointCoords = feature.geometry.coordinates;
-                if (Array.isArray(pointCoords) && pointCoords.length >= 2) {
-                  const coordinates: [number, number] = [
-                    pointCoords[0],
-                    pointCoords[1],
-                  ];
-                  const description = feature.properties?.description || "";
+          const coords = feature.geometry.coordinates;
+          if (!Array.isArray(coords) || coords.length < 2) return;
 
-                  while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
-                    coordinates[0] +=
-                      e.lngLat.lng > coordinates[0] ? 360 : -360;
-                  }
+          const coordinates: [number, number] = [coords[0], coords[1]];
+          const description =
+            typeof feature.properties?.description === "string"
+              ? feature.properties.description
+              : "";
 
-                  popup.setLngLat(coordinates).setHTML(description).addTo(map);
-                }
-              }
-            }
-          });
+          while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+            coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+          }
 
-          map.on("mouseleave", "sensor-circles", () => {
-            map.getCanvas().style.cursor = "";
-            popup.remove();
-          });
+          popupRef.current
+            ?.setLngLat(coordinates)
+            .setHTML(description)
+            .addTo(map);
+        });
 
-          console.log("➕ Added new markers and event handlers");
-        }
+        map.on("mouseleave", LAYER_ID, () => {
+          map.getCanvas().style.cursor = "";
+          popupRef.current?.remove();
+        });
+      }
 
-        // Fit bounds to show all sensors (only if more than one sensor)
-        if (sensors.length > 1) {
-          const bounds = new mapboxgl.LngLatBounds();
-          sensors.forEach((sensor) => {
-            bounds.extend(sensor.coordinates);
-          });
-          map.fitBounds(bounds, { padding: 50, maxZoom: 15 });
-        }
-
-        // Clear existing custom labels
-        const existingLabels = document.querySelectorAll(
-          ".sensor-label-marker"
-        );
-        existingLabels.forEach((label) => label.remove());
-
-        // Add custom labels if requested
-        if (showLabels) {
-          sensors.forEach((sensor) => {
-            const el = document.createElement("div");
-            el.className = "sensor-label-marker";
-            el.innerHTML = `
+      // labels (safe remove via marker.remove)
+      clearLabelMarkers();
+      if (showLabels) {
+        for (const sensor of sensors) {
+          const el = document.createElement("div");
+          el.innerHTML = `
             <div style="
-              background-color: #3B82F6;
-              color: white;
-              padding: 4px 8px;
-              border-radius: 4px;
-              font-size: 12px;
-              font-weight: bold;
-              white-space: nowrap;
+              background-color:#3B82F6;
+              color:white;
+              padding:4px 8px;
+              border-radius:4px;
+              font-size:12px;
+              font-weight:bold;
+              white-space:nowrap;
               transform: translateY(-100%);
               margin-bottom: 5px;
             ">
               ${sensor.id}
             </div>
           `;
-            new mapboxgl.Marker(el).setLngLat(sensor.coordinates).addTo(map);
-          });
+
+          const marker = new mapboxgl.Marker({ element: el })
+            .setLngLat(sensor.coordinates)
+            .addTo(map);
+
+          labelMarkersRef.current.push(marker);
         }
-      } catch (error) {
-        console.error("❌ Error adding markers:", error);
+      }
+
+      // fit bounds if multiple
+      if (sensors.length > 1) {
+        const bounds = new mapboxgl.LngLatBounds();
+        for (const s of sensors) bounds.extend(s.coordinates);
+        map.fitBounds(bounds, { padding: 50, maxZoom: 15 });
       }
     },
-    [sensors, showLabels, createPopupContent]
+    [sensors, showLabels, createPopupContent, clearLabelMarkers]
   );
 
+  // ✅ init map ONCE (no sensors dependency)
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
+    if (!mapContainerRef.current) return;
+    if (mapRef.current) return;
 
-    console.log(
-      "🗺️ Initializing map with token:",
-      mapboxgl.accessToken ? "Token found" : "No token"
-    );
+    if (!mapboxgl.accessToken) {
+      setMapError(
+        "Missing Mapbox access token (NEXT_PUBLIC_MAP_BOX_ACCESS_KEY)."
+      );
+      return;
+    }
 
     try {
-      let mapCenter: [number, number] = center || [-121.901782, 36.837007];
-      if (!center && sensors && sensors.length > 0) {
-        mapCenter = sensors[0].coordinates;
-      }
-
-      console.log("📍 Map center:", mapCenter);
-
       const map = new mapboxgl.Map({
         container: mapContainerRef.current,
         style: "mapbox://styles/mapbox/streets-v12",
-        center: mapCenter,
-        zoom: zoom,
+        center: initialCenter,
+        zoom,
         antialias: true,
       });
 
       map.addControl(new mapboxgl.NavigationControl(), "top-right");
 
-      // ✅ FIXED: Track both map load and style load separately
       map.on("load", () => {
-        console.log("✅ Map loaded successfully!");
         setMapLoaded(true);
-      });
-
-      map.on("style.load", () => {
-        console.log("🎨 Style loaded!");
-        setStyleLoaded(true); // ✅ Track style loading
-      });
-
-      // ✅ FIXED: Only add markers when style is loaded
-      map.on("styledata", () => {
-        if (map.isStyleLoaded()) {
-          console.log("🎨 Style fully loaded, safe to add markers");
-          addMarkersToMap(map);
-        }
+        // add first dataset after load
+        setGeoJsonData(map);
       });
 
       map.on("error", (e) => {
         console.error("❌ Map error:", e);
-        setMapError("Map tiles failed to load. Using fallback view.");
+        // don't hard-fail for tile hiccups; only set if it becomes unusable
       });
 
       mapRef.current = map;
-    } catch (error) {
-      console.error("❌ Failed to initialize map:", error);
+    } catch (err) {
+      console.error("❌ Failed to initialize map:", err);
       setMapError("Failed to initialize map");
     }
 
     return () => {
+      // cleanup (important for React dev double-mount)
+      clearLabelMarkers();
+      popupRef.current?.remove();
+      popupRef.current = null;
+      handlersBoundRef.current = false;
+
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
+
+      // ✅ critical: ensure container is empty after remove
+      if (mapContainerRef.current) {
+        mapContainerRef.current.innerHTML = "";
+      }
     };
-  }, [center, zoom, addMarkersToMap]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // ✅ no deps
 
-  // ✅ FIXED: Only update markers when both map and style are loaded
+  // update markers when sensors/labels change
   useEffect(() => {
-    if (mapRef.current && mapLoaded && styleLoaded) {
-      console.log("🔄 Updating markers for new sensor data:", sensors?.length);
-      addMarkersToMap(mapRef.current);
-    }
-  }, [sensors, mapLoaded, styleLoaded, showLabels, addMarkersToMap]);
+    if (!mapRef.current || !mapLoaded) return;
 
-  // Update map center when center prop changes
-  useEffect(() => {
-    if (mapRef.current && mapLoaded && center) {
-      console.log("📍 Updating map center to:", center);
-      mapRef.current.flyTo({
-        center: center,
-        zoom: zoom,
-        duration: 1000,
-      });
+    // if style not ready yet, wait for it
+    const map = mapRef.current;
+    if (!map.isStyleLoaded()) {
+      const onStyle = () => {
+        if (mapRef.current && mapRef.current.isStyleLoaded()) {
+          setGeoJsonData(mapRef.current);
+          mapRef.current.off("styledata", onStyle);
+        }
+      };
+      map.on("styledata", onStyle);
+      return () => {
+        map.off("styledata", onStyle);
+      };
     }
+
+    setGeoJsonData(map);
+  }, [sensors, showLabels, mapLoaded, setGeoJsonData]);
+
+  // center updates
+  useEffect(() => {
+    if (!mapRef.current || !mapLoaded || !center) return;
+    mapRef.current.flyTo({ center, zoom, duration: 900 });
   }, [center, zoom, mapLoaded]);
 
   if (mapError) {
     return (
       <div
         className={`flex items-center justify-center bg-gray-800 rounded-lg ${className}`}
-        style={{ width: "100%", height: height }}
+        style={{ width: "100%", height }}
       >
         <div className="text-center p-4">
           <p className="text-yellow-400 mb-2">⚠️ Map Loading Issue</p>
           <p className="text-gray-400 text-sm">{mapError}</p>
-          <p className="text-xs text-gray-500 mt-2">
-            Your token is working, but tiles may be slow to load
-          </p>
         </div>
       </div>
     );
@@ -435,20 +434,21 @@ const MapboxMap: React.FC<MapboxMapProps> = ({
   return (
     <div
       ref={mapContainerRef}
-      style={{ width: "100%", height: height }}
+      style={{ width: "100%", height }}
       className={`map-container rounded-lg overflow-hidden ${className}`}
     >
       {!mapLoaded && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-800 bg-opacity-90 z-10">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400 mx-auto mb-2"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400 mx-auto mb-2" />
             <p className="text-gray-300 text-sm">Loading map...</p>
           </div>
         </div>
       )}
+
       <style jsx>{`
         .mapboxgl-popup {
-          max-width: 400px;
+          max-width: 420px;
           font: 12px/20px "Helvetica Neue", Arial, Helvetica, sans-serif;
         }
         .mapboxgl-popup-content {

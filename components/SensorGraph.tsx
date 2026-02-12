@@ -1,7 +1,6 @@
-// components/SensorGraph.tsx
-// UPDATED to accept Arduino-native battery fields (lipVoltage/rtcBattery) while remaining backward compatible
 "use client";
-import React, { useState, useMemo } from "react";
+
+import React, { useMemo, useState } from "react";
 import {
   LineChart,
   Line,
@@ -22,12 +21,14 @@ interface Reading {
   moisture4: number;
   temperature: number;
   humidity: number;
+
   // Prefer Arduino names; keep legacy optional for backward compatibility
   lipVoltage?: number; // LiPo battery voltage (V)
   rtcBattery?: number; // RTC battery voltage (V)
   battery1?: number; // legacy alias of lipVoltage
   battery2?: number; // legacy alias of rtcBattery
-  timestamp: string;
+
+  timestamp: string; // ISO string
 }
 
 interface Sensor {
@@ -50,10 +51,9 @@ interface SensorGraphProps {
   selectedBox: Box;
 }
 
-/** Strong type for chart rows so TS knows processedData’s shape */
-interface ChartReading {
-  timestamp: string;
-  time: string;
+interface ChartRow {
+  ts: number; // numeric time
+  xLabel: string; // label shown on XAxis + Tooltip
   moisture1: number;
   moisture2: number;
   moisture3: number;
@@ -61,12 +61,12 @@ interface ChartReading {
   moistureAvg: number;
   temperature: number;
   humidity: number;
-  lipVoltage: number; // normalized LiPo (V)
-  rtcBattery: number; // normalized RTC (V)
+  lipVoltage: number;
+  rtcBattery: number;
   batteryAvg: number;
+  sensorsCount: number;
 }
 
-// Types for tooltip payload (minimal shape we use)
 interface TooltipPayloadItem {
   color: string;
   name: string;
@@ -80,8 +80,21 @@ interface CustomTooltipProps {
   label?: string;
 }
 
+function startOfDay(dateStr: string) {
+  // dateStr: YYYY-MM-DD
+  const d = new Date(dateStr);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function endOfDay(dateStr: string) {
+  // inclusive end of day
+  const d = new Date(dateStr);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
 export default function SensorGraph({ selectedBox }: SensorGraphProps) {
-  // State for controlling what data to show
   const [selectedMetrics, setSelectedMetrics] = useState({
     moisture1: true,
     moisture2: true,
@@ -90,72 +103,128 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
     moistureAvg: true,
     temperature: true,
     humidity: true,
-    battery1: false, // Keep toggle labels as-is; series will point to Arduino keys
+    battery1: false, // toggles kept as-is
     battery2: false,
   });
 
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
 
-  // Process data for the graph - use sensors[0].readings
-  const processedData = useMemo<ChartReading[]>(() => {
-    if (!selectedBox?.sensors?.[0]?.readings) return [];
+  /**
+   * ✅ Key upgrade:
+   * - Uses ALL sensors (not just sensors[0])
+   * - Fixes date filtering (end date inclusive)
+   * - Aggregates readings across sensors by minute-bucket (safe + readable)
+   */
+  const processedData = useMemo<ChartRow[]>(() => {
+    const sensors = selectedBox?.sensors ?? [];
+    if (sensors.length === 0) return [];
 
-    const readings = selectedBox.sensors[0].readings.slice(); // copy before sort
-    let filteredReadings = readings;
+    // Flatten readings across sensors
+    const flat = sensors.flatMap((s) =>
+      (s.readings ?? []).map((r) => ({
+        su_id: s.su_id,
+        ...r,
+      }))
+    );
 
-    // Apply date filter if set
+    if (flat.length === 0) return [];
+
+    // Apply date filtering (inclusive end-of-day)
+    let filtered = flat;
+
     if (dateRange.start) {
-      const start = new Date(dateRange.start);
-      filteredReadings = filteredReadings.filter(
-        (reading) => new Date(reading.timestamp) >= start
+      const start = startOfDay(dateRange.start).getTime();
+      filtered = filtered.filter(
+        (r) => new Date(r.timestamp).getTime() >= start
       );
     }
     if (dateRange.end) {
-      const end = new Date(dateRange.end);
-      filteredReadings = filteredReadings.filter(
-        (reading) => new Date(reading.timestamp) <= end
-      );
+      const end = endOfDay(dateRange.end).getTime();
+      filtered = filtered.filter((r) => new Date(r.timestamp).getTime() <= end);
     }
 
+    if (filtered.length === 0) return [];
+
     // Sort by timestamp
-    filteredReadings.sort(
+    filtered.sort(
       (a, b) =>
         new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
-    return filteredReadings.map((reading): ChartReading => {
-      const moistureAvg =
-        (reading.moisture1 +
-          reading.moisture2 +
-          reading.moisture3 +
-          reading.moisture4) /
-        4;
+    // Group by minute bucket so multiple sensors at similar times become one "overall" point
+    // Bucket format: YYYY-MM-DDTHH:MM (local-ish via Date -> ISO-like not guaranteed),
+    // so use numeric bucket = floor(ts / 60000)
+    const buckets = new Map<number, { rows: typeof filtered }>();
 
-      // Normalize batteries: prefer Arduino names, fall back to legacy
-      const lip = reading.lipVoltage ?? reading.battery1 ?? 0;
-      const rtc = reading.rtcBattery ?? reading.battery2 ?? 0;
+    for (const r of filtered) {
+      const ts = new Date(r.timestamp).getTime();
+      const bucket = Math.floor(ts / 60000); // per minute
+      const existing = buckets.get(bucket);
+      if (existing) existing.rows.push(r);
+      else buckets.set(bucket, { rows: [r] });
+    }
 
-      return {
-        timestamp: new Date(reading.timestamp).toLocaleDateString(),
-        time: new Date(reading.timestamp).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        moisture1: reading.moisture1,
-        moisture2: reading.moisture2,
-        moisture3: reading.moisture3,
-        moisture4: reading.moisture4,
+    const result: ChartRow[] = [];
+    const sortedBuckets = Array.from(buckets.entries()).sort(
+      (a, b) => a[0] - b[0]
+    );
+
+    for (const [bucket, { rows }] of sortedBuckets) {
+      const ts = bucket * 60000;
+
+      // average across sensors
+      const sensorsCount = rows.length;
+
+      const sum = (key: keyof Reading, fallbackKey?: keyof Reading) =>
+        rows.reduce((acc, r) => {
+          const v =
+            typeof r[key] === "number"
+              ? (r[key] as number)
+              : fallbackKey && typeof r[fallbackKey] === "number"
+              ? (r[fallbackKey] as number)
+              : 0;
+          return acc + v;
+        }, 0);
+
+      const m1 = sum("moisture1") / sensorsCount;
+      const m2 = sum("moisture2") / sensorsCount;
+      const m3 = sum("moisture3") / sensorsCount;
+      const m4 = sum("moisture4") / sensorsCount;
+
+      const moistureAvg = (m1 + m2 + m3 + m4) / 4;
+
+      const temperature = sum("temperature") / sensorsCount;
+      const humidity = sum("humidity") / sensorsCount;
+
+      const lipVoltage = sum("lipVoltage", "battery1") / sensorsCount;
+      const rtcBattery = sum("rtcBattery", "battery2") / sensorsCount;
+
+      const d = new Date(ts);
+      const xLabel = `${d.toLocaleDateString()} ${d.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })}`;
+
+      result.push({
+        ts,
+        xLabel,
+        moisture1: m1,
+        moisture2: m2,
+        moisture3: m3,
+        moisture4: m4,
         moistureAvg,
-        temperature: reading.temperature,
-        humidity: reading.humidity,
-        lipVoltage: lip,
-        rtcBattery: rtc,
-        batteryAvg: (lip + rtc) / 2,
-      };
-    });
+        temperature,
+        humidity,
+        lipVoltage,
+        rtcBattery,
+        batteryAvg: (lipVoltage + rtcBattery) / 2,
+        sensorsCount,
+      });
+    }
+
+    return result;
   }, [selectedBox, dateRange]);
 
-  // Custom tooltip with unit-aware labels (typed, no any)
   const CustomTooltip: React.FC<CustomTooltipProps> = ({
     active,
     payload,
@@ -163,17 +232,20 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
   }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-gray-800 border border-gray-600 rounded-lg p-3 shadow-lg">
-          <p className="text-white font-medium">{`Time: ${label}`}</p>
+        <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-lg">
+          <p className="text-gray-900 font-semibold mb-1">{label}</p>
           {payload.map((entry, index) => {
             const key = entry?.dataKey ?? "";
             const isVolt = key === "lipVoltage" || key === "rtcBattery";
             const isTemp = key === "temperature";
             const unit = isVolt ? " V" : isTemp ? "°C" : "%";
-            const val = entry.value.toFixed(isVolt ? 2 : 1);
+            const val = Number(entry.value);
+            const formatted = Number.isFinite(val)
+              ? val.toFixed(isVolt ? 2 : 1)
+              : "—";
             return (
               <p key={index} style={{ color: entry.color }}>
-                {`${entry.name}: ${val}${unit}`}
+                {`${entry.name}: ${formatted}${unit}`}
               </p>
             );
           })}
@@ -183,17 +255,21 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
     return null;
   };
 
-  // Clear date range
-  const clearDateRange = () => {
-    setDateRange({ start: "", end: "" });
-  };
+  const clearDateRange = () => setDateRange({ start: "", end: "" });
 
-  // Check if we have readings data
-  if (!selectedBox || !selectedBox.sensors?.[0]?.readings?.length) {
+  // If no data at all
+  const totalReadings = (selectedBox?.sensors ?? []).reduce(
+    (acc, s) => acc + (s.readings?.length ?? 0),
+    0
+  );
+
+  if (!selectedBox || totalReadings === 0) {
     return (
-      <div className="bg-[#0F111A] border border-gray-600 rounded-lg p-8 text-center">
-        <h3 className="text-xl font-semibold mb-2">No Data Available</h3>
-        <p className="text-gray-400">
+      <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
+        <h3 className="text-xl font-semibold mb-2 text-gray-900">
+          No Data Available
+        </h3>
+        <p className="text-gray-600">
           No sensor readings available for graphing.
         </p>
       </div>
@@ -201,21 +277,21 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
   }
 
   return (
-    <div className="bg-[#0F111A] border border-gray-600 rounded-lg p-6">
-      <h2 className="text-2xl font-bold mb-6">
-        {selectedBox.name || selectedBox.box_id} - Sensor Data Analysis
+    <div className="bg-white border border-gray-200 rounded-xl p-6">
+      <h2 className="text-xl md:text-2xl font-bold mb-4 text-gray-900">
+        {selectedBox.name || selectedBox.box_id} - Sensor Data
       </h2>
 
       {/* Controls */}
       <div className="mb-6 space-y-4">
         {/* Metric Selection */}
         <div>
-          <h3 className="text-lg font-medium mb-3">
+          <h3 className="text-sm font-semibold mb-3 text-gray-800">
             Select Metrics to Display
           </h3>
+
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {/* Moisture Sensors */}
-            <label className="flex items-center space-x-2 text-sm">
+            <label className="flex items-center space-x-2 text-sm text-gray-700">
               <input
                 type="checkbox"
                 checked={selectedMetrics.moisture1}
@@ -225,11 +301,12 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
                     moisture1: e.target.checked,
                   }))
                 }
-                className="rounded bg-gray-700 border-gray-600"
+                className="rounded border-gray-300"
               />
-              <span className="text-blue-400">Moisture 1</span>
+              <span>Moisture 1</span>
             </label>
-            <label className="flex items-center space-x-2 text-sm">
+
+            <label className="flex items-center space-x-2 text-sm text-gray-700">
               <input
                 type="checkbox"
                 checked={selectedMetrics.moisture2}
@@ -239,11 +316,12 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
                     moisture2: e.target.checked,
                   }))
                 }
-                className="rounded bg-gray-700 border-gray-600"
+                className="rounded border-gray-300"
               />
-              <span className="text-blue-300">Moisture 2</span>
+              <span>Moisture 2</span>
             </label>
-            <label className="flex items-center space-x-2 text-sm">
+
+            <label className="flex items-center space-x-2 text-sm text-gray-700">
               <input
                 type="checkbox"
                 checked={selectedMetrics.moisture3}
@@ -253,11 +331,12 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
                     moisture3: e.target.checked,
                   }))
                 }
-                className="rounded bg-gray-700 border-gray-600"
+                className="rounded border-gray-300"
               />
-              <span className="text-blue-500">Moisture 3</span>
+              <span>Moisture 3</span>
             </label>
-            <label className="flex items-center space-x-2 text-sm">
+
+            <label className="flex items-center space-x-2 text-sm text-gray-700">
               <input
                 type="checkbox"
                 checked={selectedMetrics.moisture4}
@@ -267,11 +346,12 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
                     moisture4: e.target.checked,
                   }))
                 }
-                className="rounded bg-gray-700 border-gray-600"
+                className="rounded border-gray-300"
               />
-              <span className="text-blue-600">Moisture 4</span>
+              <span>Moisture 4</span>
             </label>
-            <label className="flex items-center space-x-2 text-sm">
+
+            <label className="flex items-center space-x-2 text-sm text-gray-700">
               <input
                 type="checkbox"
                 checked={selectedMetrics.moistureAvg}
@@ -281,13 +361,12 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
                     moistureAvg: e.target.checked,
                   }))
                 }
-                className="rounded bg-gray-700 border-gray-600"
+                className="rounded border-gray-300"
               />
-              <span className="text-cyan-400 font-medium">Moisture Avg</span>
+              <span className="font-semibold">Moisture Avg</span>
             </label>
 
-            {/* Environment Sensors */}
-            <label className="flex items-center space-x-2 text-sm">
+            <label className="flex items-center space-x-2 text-sm text-gray-700">
               <input
                 type="checkbox"
                 checked={selectedMetrics.temperature}
@@ -297,11 +376,12 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
                     temperature: e.target.checked,
                   }))
                 }
-                className="rounded bg-gray-700 border-gray-600"
+                className="rounded border-gray-300"
               />
-              <span className="text-orange-400">Temperature</span>
+              <span>Temperature</span>
             </label>
-            <label className="flex items-center space-x-2 text-sm">
+
+            <label className="flex items-center space-x-2 text-sm text-gray-700">
               <input
                 type="checkbox"
                 checked={selectedMetrics.humidity}
@@ -311,13 +391,12 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
                     humidity: e.target.checked,
                   }))
                 }
-                className="rounded bg-gray-700 border-gray-600"
+                className="rounded border-gray-300"
               />
-              <span className="text-green-400">Humidity</span>
+              <span>Humidity</span>
             </label>
 
-            {/* Battery Sensors */}
-            <label className="flex items-center space-x-2 text-sm">
+            <label className="flex items-center space-x-2 text-sm text-gray-700">
               <input
                 type="checkbox"
                 checked={selectedMetrics.battery1}
@@ -327,11 +406,12 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
                     battery1: e.target.checked,
                   }))
                 }
-                className="rounded bg-gray-700 border-gray-600"
+                className="rounded border-gray-300"
               />
-              <span className="text-purple-400">Battery 1 (LiPo)</span>
+              <span>Battery 1 (LiPo)</span>
             </label>
-            <label className="flex items-center space-x-2 text-sm">
+
+            <label className="flex items-center space-x-2 text-sm text-gray-700">
               <input
                 type="checkbox"
                 checked={selectedMetrics.battery2}
@@ -341,45 +421,54 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
                     battery2: e.target.checked,
                   }))
                 }
-                className="rounded bg-gray-700 border-gray-600"
+                className="rounded border-gray-300"
               />
-              <span className="text-pink-400">Battery 2 (RTC)</span>
+              <span>Battery 2 (RTC)</span>
             </label>
           </div>
         </div>
 
         {/* Date Range Filter */}
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-end gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Start Date</label>
+            <label className="block text-sm font-medium mb-1 text-gray-700">
+              Start Date
+            </label>
             <input
               type="date"
               value={dateRange.start}
               onChange={(e) =>
                 setDateRange((prev) => ({ ...prev, start: e.target.value }))
               }
-              className="bg-gray-700 border border-gray-600 rounded px-3 py-1 text-sm"
+              className="bg-white border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
             />
           </div>
+
           <div>
-            <label className="block text-sm font-medium mb-1">End Date</label>
+            <label className="block text-sm font-medium mb-1 text-gray-700">
+              End Date
+            </label>
             <input
               type="date"
               value={dateRange.end}
               onChange={(e) =>
                 setDateRange((prev) => ({ ...prev, end: e.target.value }))
               }
-              className="bg-gray-700 border border-gray-600 rounded px-3 py-1 text-sm"
+              className="bg-white border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
             />
           </div>
+
           <button
             onClick={clearDateRange}
-            className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-sm mt-6"
+            className="bg-gray-100 hover:bg-gray-200 text-gray-900 border border-gray-300 px-3 py-2 rounded text-sm"
           >
             Clear
           </button>
-          <div className="text-sm text-gray-400 mt-6">
-            Showing {processedData.length} readings
+
+          <div className="text-sm text-gray-600">
+            Showing{" "}
+            <span className="font-semibold">{processedData.length}</span> points
+            (avg across sensors)
           </div>
         </div>
       </div>
@@ -388,13 +477,17 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
       <div className="h-96 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={processedData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis dataKey="timestamp" stroke="#9CA3AF" fontSize={12} />
-            <YAxis stroke="#9CA3AF" fontSize={12} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+            <XAxis
+              dataKey="xLabel"
+              stroke="#6B7280"
+              fontSize={12}
+              minTickGap={20}
+            />
+            <YAxis stroke="#6B7280" fontSize={12} />
             <Tooltip content={<CustomTooltip />} />
             <Legend />
 
-            {/* Moisture Lines */}
             {selectedMetrics.moisture1 && (
               <Line
                 type="monotone"
@@ -441,12 +534,11 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
                 dataKey="moistureAvg"
                 stroke="#0EA5E9"
                 strokeWidth={3}
-                name="Moisture Average"
+                name="Moisture Avg"
                 dot={false}
               />
             )}
 
-            {/* Environment Lines */}
             {selectedMetrics.temperature && (
               <Line
                 type="monotone"
@@ -468,7 +560,6 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
               />
             )}
 
-            {/* Battery Lines (now use Arduino-native keys) */}
             {selectedMetrics.battery1 && (
               <Line
                 type="monotone"
@@ -490,16 +581,16 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
               />
             )}
 
-            <Brush dataKey="timestamp" height={30} stroke="#4B5563" />
+            <Brush dataKey="xLabel" height={30} stroke="#9CA3AF" />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
       {/* Summary Stats */}
       <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-        <div className="bg-gray-800 rounded p-3">
-          <h4 className="text-blue-400 font-medium">Moisture Range</h4>
-          <p>
+        <div className="bg-gray-50 border border-gray-200 rounded p-3">
+          <h4 className="text-gray-900 font-semibold">Moisture Avg Range</h4>
+          <p className="text-gray-700">
             {processedData.length > 0
               ? `${Math.min(...processedData.map((d) => d.moistureAvg)).toFixed(
                   1
@@ -509,9 +600,10 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
               : "No data"}
           </p>
         </div>
-        <div className="bg-gray-800 rounded p-3">
-          <h4 className="text-orange-400 font-medium">Temp Range</h4>
-          <p>
+
+        <div className="bg-gray-50 border border-gray-200 rounded p-3">
+          <h4 className="text-gray-900 font-semibold">Temperature Range</h4>
+          <p className="text-gray-700">
             {processedData.length > 0
               ? `${Math.min(...processedData.map((d) => d.temperature)).toFixed(
                   1
@@ -521,9 +613,10 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
               : "No data"}
           </p>
         </div>
-        <div className="bg-gray-800 rounded p-3">
-          <h4 className="text-green-400 font-medium">Humidity Range</h4>
-          <p>
+
+        <div className="bg-gray-50 border border-gray-200 rounded p-3">
+          <h4 className="text-gray-900 font-semibold">Humidity Range</h4>
+          <p className="text-gray-700">
             {processedData.length > 0
               ? `${Math.min(...processedData.map((d) => d.humidity)).toFixed(
                   1
@@ -533,9 +626,10 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
               : "No data"}
           </p>
         </div>
-        <div className="bg-gray-800 rounded p-3">
-          <h4 className="text-purple-400 font-medium">Data Points</h4>
-          <p>{processedData.length} readings</p>
+
+        <div className="bg-gray-50 border border-gray-200 rounded p-3">
+          <h4 className="text-gray-900 font-semibold">Points</h4>
+          <p className="text-gray-700">{processedData.length}</p>
         </div>
       </div>
     </div>

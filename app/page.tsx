@@ -4,7 +4,7 @@ import Navbar from "@/components/Navbar";
 import MapboxMap from "@/components/MapboxMap";
 import Weather from "@/components/Weather";
 import SensorGraph from "@/components/SensorGraph";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   ChevronLeftIcon,
@@ -15,8 +15,9 @@ import {
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
 import WaterDropLoader from "@/components/WaterDropLoader";
+import Link from "next/link";
 
-// -------- Types (same as before) --------
+// -------- Types --------
 interface IoTDevice {
   box_id: string;
   name: string;
@@ -25,6 +26,10 @@ interface IoTDevice {
   longitude: number;
   isOnline: boolean;
   lastSeen: string;
+
+  farmId?: string | null;
+  farmName?: string | null;
+
   currentReadings: {
     moisture: number;
     moisture1: number;
@@ -38,6 +43,7 @@ interface IoTDevice {
     dataPoints: number;
   } | null;
 }
+
 interface SensorMarker {
   id: string;
   name: string;
@@ -55,11 +61,13 @@ interface SensorMarker {
     dataPoints?: number;
   };
 }
+
 interface ApiResponse {
   success: boolean;
   boxes?: IoTDevice[];
   error?: string;
 }
+
 interface ClaimResponse {
   success: boolean;
   message?: string;
@@ -72,48 +80,34 @@ interface ClaimResponse {
     claimedAt: string;
   };
 }
+
+type Farm = {
+  id: string;
+  name: string;
+  description?: string | null;
+  location?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type ListFarmsOk = { ok: true; farms: Farm[] };
+type ListFarmsErr = { ok: false; error: string };
+type ListFarmsResponse = ListFarmsOk | ListFarmsErr;
+
+type CreateFarmOk = { ok: true; farm: Farm };
+type CreateFarmErr = { ok: false; error: string };
+type CreateFarmResponse = CreateFarmOk | CreateFarmErr;
+
+type AssignFarmOk = { ok: true };
+type AssignFarmErr = { ok: false; error: string };
+type AssignFarmResponse = AssignFarmOk | AssignFarmErr;
+
 interface UseIoTDevicesReturn {
   devices: IoTDevice[];
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
 }
-
-// -------- Data hook (unchanged) --------
-const useIoTDevices = (): UseIoTDevicesReturn => {
-  const [devices, setDevices] = useState<IoTDevice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchDevices = async () => {
-    try {
-      setError(null);
-      const res = await fetch("/api/dashboard/devices");
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data: ApiResponse = await res.json();
-      if (data.success) setDevices(data.boxes || []);
-      else {
-        setError(data.error || "Failed to fetch device data");
-        setDevices([]);
-      }
-    } catch (e) {
-      setError(
-        "Network error while fetching device data: " + (e as Error).message
-      );
-      setDevices([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchDevices();
-    const i = setInterval(fetchDevices, 30000);
-    return () => clearInterval(i);
-  }, []);
-
-  return { devices, loading, error, refetch: fetchDevices };
-};
 
 // -------- Helpers --------
 const toMarkers = (devices: IoTDevice[]): SensorMarker[] =>
@@ -137,15 +131,85 @@ const toMarkers = (devices: IoTDevice[]): SensorMarker[] =>
       : undefined,
   }));
 
+const NEW_FARM_VALUE = "__new_farm__";
+const FILTER_ALL = "__all__";
+const FILTER_UNASSIGNED = "__none__";
+
 export default function Home() {
   const [scrollPosition, setScrollPosition] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [cardWidth, setCardWidth] = useState(0);
+
   const [showClaimModal, setShowClaimModal] = useState(false);
   const [deviceId, setDeviceId] = useState("");
   const [claiming, setClaiming] = useState(false);
 
+  // Farms state (for modal + filter)
+  const [farms, setFarms] = useState<Farm[]>([]);
+  const [farmsLoading, setFarmsLoading] = useState(false);
+  const [farmsErr, setFarmsErr] = useState<string | null>(null);
+  const [selectedFarmId, setSelectedFarmId] = useState<string>("");
+
+  // Dashboard filter
+  const [farmFilter, setFarmFilter] = useState<string>(FILTER_ALL);
+
+  // Inline create farm (modal)
+  const [creatingFarm, setCreatingFarm] = useState(false);
+  const [newFarmName, setNewFarmName] = useState("");
+  const [newFarmLocation, setNewFarmLocation] = useState("");
+  const [newFarmDescription, setNewFarmDescription] = useState("");
+
+  // Assign existing device to farm
+  const [assigningDeviceId, setAssigningDeviceId] = useState<string | null>(
+    null
+  );
+
   const { data: session, status } = useSession();
+
+  // -------- Devices hook (now respects farmFilter) --------
+  const useIoTDevices = (): UseIoTDevicesReturn => {
+    const [devices, setDevices] = useState<IoTDevice[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchDevices = async () => {
+      try {
+        setError(null);
+
+        const url =
+          farmFilter === FILTER_ALL
+            ? "/api/dashboard/devices"
+            : `/api/dashboard/devices?farmId=${encodeURIComponent(farmFilter)}`;
+
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+
+        const data: ApiResponse = await res.json();
+        if (data.success) setDevices(data.boxes || []);
+        else {
+          setError(data.error || "Failed to fetch device data");
+          setDevices([]);
+        }
+      } catch (e) {
+        setError(
+          "Network error while fetching device data: " + (e as Error).message
+        );
+        setDevices([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    useEffect(() => {
+      fetchDevices();
+      const i = setInterval(fetchDevices, 30000);
+      return () => clearInterval(i);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [farmFilter]);
+
+    return { devices, loading, error, refetch: fetchDevices };
+  };
+
   const { devices, loading, error, refetch } = useIoTDevices();
 
   useEffect(() => {
@@ -165,15 +229,109 @@ export default function Home() {
     return () => window.removeEventListener("resize", calc);
   }, [devices]);
 
+  const loadFarms = useCallback(async () => {
+    setFarmsErr(null);
+    setFarmsLoading(true);
+    try {
+      const res = await fetch("/api/farms", { cache: "no-store" });
+      const json: ListFarmsResponse = await res.json();
+
+      if (!res.ok || !json.ok) {
+        const msg = !json.ok ? json.error : "Failed to load farms";
+        setFarmsErr(msg);
+        setFarms([]);
+        setSelectedFarmId("");
+        return;
+      }
+
+      setFarms(json.farms ?? []);
+      if ((json.farms ?? []).length > 0) {
+        setSelectedFarmId((prev) => prev || json.farms[0].id);
+      } else {
+        setSelectedFarmId(NEW_FARM_VALUE);
+      }
+    } catch {
+      setFarmsErr("Network error while loading farms");
+      setFarms([]);
+      setSelectedFarmId("");
+    } finally {
+      setFarmsLoading(false);
+    }
+  }, []);
+
+  // Load farms once for the dashboard filter
+  useEffect(() => {
+    loadFarms();
+  }, [loadFarms]);
+
+  const openClaimModal = async () => {
+    setShowClaimModal(true);
+    await loadFarms();
+  };
+
+  const resetNewFarmFields = () => {
+    setNewFarmName("");
+    setNewFarmLocation("");
+    setNewFarmDescription("");
+  };
+
+  const handleCreateFarmInline = async () => {
+    const name = newFarmName.trim();
+    if (name.length < 2) {
+      alert("Farm name must be at least 2 characters");
+      return;
+    }
+
+    setCreatingFarm(true);
+    try {
+      const res = await fetch("/api/farms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          location: newFarmLocation.trim() || undefined,
+          description: newFarmDescription.trim() || undefined,
+        }),
+      });
+
+      const json: CreateFarmResponse = await res.json();
+
+      if (!res.ok || !json.ok) {
+        const msg = !json.ok ? json.error : "Failed to create farm";
+        alert(`❌ ${msg}`);
+        return;
+      }
+
+      setFarms((prev) => [json.farm, ...prev]);
+      setSelectedFarmId(json.farm.id);
+      resetNewFarmFields();
+
+      // If user had "unassigned" selected, keep it. Otherwise switch to new farm is optional.
+    } catch {
+      alert("❌ Network error while creating farm");
+    } finally {
+      setCreatingFarm(false);
+    }
+  };
+
   const handleClaimDevice = async () => {
     if (!deviceId.trim()) return alert("Please enter a device ID");
+    if (!selectedFarmId) return alert("Please select a farm");
+    if (selectedFarmId === NEW_FARM_VALUE) {
+      return alert("Please create a farm first (or select an existing one).");
+    }
+
     setClaiming(true);
     try {
       const res = await fetch("/api/devices/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId: deviceId.trim() }),
+        body: JSON.stringify({
+          deviceId: deviceId.trim(),
+          farmId: selectedFarmId,
+        }),
       });
+
       const data: ClaimResponse = await res.json();
       if (data.success) {
         alert(`✅ Device claimed successfully!\n\n${data.message}`);
@@ -190,13 +348,46 @@ export default function Home() {
     }
   };
 
+  const handleAssignExistingDeviceToFarm = async (
+    deviceIdToAssign: string,
+    farmIdToAssign: string
+  ) => {
+    if (!farmIdToAssign) return;
+
+    setAssigningDeviceId(deviceIdToAssign);
+    try {
+      const res = await fetch("/api/devices/assign-farm", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceId: deviceIdToAssign,
+          farmId: farmIdToAssign,
+        }),
+      });
+
+      const json: AssignFarmResponse = await res.json();
+      if (!res.ok || !json.ok) {
+        const msg = !json.ok ? json.error : "Failed to assign farm";
+        alert(`❌ ${msg}`);
+        return;
+      }
+
+      // Refresh devices so farmName appears
+      await refetch();
+    } catch {
+      alert("❌ Network error while assigning farm");
+    } finally {
+      setAssigningDeviceId(null);
+    }
+  };
+
   if (status === "loading" || loading) return <WaterDropLoader />;
   if (!session) return null;
 
-  // metrics for Analytics card
   const total = devices.length;
   const online = devices.filter((d) => d.isOnline).length;
   const offline = total - online;
+
   const moistureDevices = devices.filter((d) => d.currentReadings);
   const avgMoisture =
     moistureDevices.length === 0
@@ -222,25 +413,57 @@ export default function Home() {
 
         <main className="py-4 pt-[90px]">
           {/* Header */}
-          <div className="flex justify-between items-center mb-6 p-3 ">
+          <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-6 p-3">
             <h1 className="text-3xl md:text-4xl font-bold">
               <span className="font-lato text-[#254e3f] ">
                 Welcome {session.user?.name || "User"}
               </span>
             </h1>
 
-            <button
-              onClick={() => setShowClaimModal(true)}
-              className="flex items-center space-x-2 bg-[#2F6F5A] hover:bg-[#275e4c] text-white px-4 py-2 rounded-lg transition-colors shadow-sm"
-            >
-              <PlusIcon className="h-5 w-5" />
-              <span>Add Device</span>
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+              {/* Farm filter */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-[#254e3f]">
+                  Filter:
+                </span>
+                <select
+                  value={farmFilter}
+                  onChange={(e) => {
+                    setFarmFilter(e.target.value);
+                    setScrollPosition(0);
+                  }}
+                  className="px-3 py-2 bg-white border border-[#D9E6E0] rounded-md focus:outline-none focus:ring-2 focus:ring-[#2F6F5A]"
+                >
+                  <option value={FILTER_ALL}>All farms</option>
+                  <option value={FILTER_UNASSIGNED}>Unassigned devices</option>
+                  {farms.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+
+                {/* <Link
+                  href="/farms"
+                  className="text-sm underline text-[#2F6F5A]"
+                >
+                  Manage farms
+                </Link> */}
+              </div>
+
+              {/* Add Device */}
+              <button
+                onClick={openClaimModal}
+                className="flex items-center justify-center space-x-2 bg-[#2F6F5A] hover:bg-[#275e4c] text-white px-4 py-2 rounded-lg transition-colors shadow-sm"
+              >
+                <PlusIcon className="h-5 w-5" />
+                <span>Add Device</span>
+              </button>
+            </div>
           </div>
 
-          {/* GRID: left content (2 cols) + right sidebar */}
+          {/* GRID */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* LEFT (2 cols): devices → map → graph */}
             <div className="lg:col-span-2 space-y-6">
               {/* Device carousel */}
               {devices.length > 0 && (
@@ -282,6 +505,9 @@ export default function Home() {
                               4
                             ).toFixed(1)
                           : "N/A";
+
+                        const needsFarm = !device.farmId;
+
                         return (
                           <div
                             key={device.box_id}
@@ -301,10 +527,51 @@ export default function Home() {
                                 {device.isOnline ? "Online" : "Offline"}
                               </span>
                             </div>
+
                             <p className="text-sm mb-1">
+                              <span className="font-medium">Farm:</span>{" "}
+                              {device.farmName ? device.farmName : "—"}
+                            </p>
+
+                            {/* Assign farm for existing claimed devices (missing farmId) */}
+                            {needsFarm && farms.length > 0 && (
+                              <div className="mt-2">
+                                <label className="block text-xs font-medium mb-1">
+                                  Assign to farm
+                                </label>
+                                <select
+                                  disabled={assigningDeviceId === device.box_id}
+                                  defaultValue=""
+                                  onChange={(e) => {
+                                    const farmIdToAssign = e.target.value;
+                                    if (!farmIdToAssign) return;
+                                    handleAssignExistingDeviceToFarm(
+                                      device.box_id,
+                                      farmIdToAssign
+                                    );
+                                  }}
+                                  className="w-full px-3 py-2 bg-white border border-[#D9E6E0] rounded-md focus:outline-none focus:ring-2 focus:ring-[#2F6F5A]"
+                                >
+                                  <option value="">Select a farm…</option>
+                                  {farms.map((f) => (
+                                    <option key={f.id} value={f.id}>
+                                      {f.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                {assigningDeviceId === device.box_id && (
+                                  <p className="text-xs text-[#5a786c] mt-1">
+                                    Assigning…
+                                  </p>
+                                )}
+                              </div>
+                            )}
+
+                            <p className="text-sm mt-3 mb-1">
                               <span className="font-medium">Location:</span>{" "}
                               {device.location}
                             </p>
+
                             {r ? (
                               <>
                                 {typeof r.moisture === "number" && (
@@ -357,6 +624,7 @@ export default function Home() {
                                 No recent sensor data
                               </p>
                             )}
+
                             <p className="text-xs text-[#5a786c] mt-2">
                               Last seen:{" "}
                               {new Date(device.lastSeen).toLocaleString()}
@@ -403,54 +671,54 @@ export default function Home() {
                 )}
               </section>
 
-              {/* Graph / Analytics (chart area) */}
+              {/* Graph */}
+              {/* Graph */}
               <section className="rounded-2xl bg-[#f0f7f3] border border-[#C4D7CD] p-6">
                 <h2 className="mb-4 text-xl font-lato font-bold text-[#0B1B18]">
                   Graph
                 </h2>
+
                 {devices.length > 0 && (
                   <SensorGraph
                     selectedBox={{
-                      box_id: devices[0].box_id,
-                      name: devices[0].name,
-                      location: devices[0].location,
+                      // keep the "box" metadata stable (use the first device just as a container)
+                      box_id: "ALL_DEVICES",
+                      name: "All Sensors",
+                      location: "All Farms",
                       latitude: devices[0].latitude,
                       longitude: devices[0].longitude,
-                      isOnline: devices[0].isOnline,
-                      lastSeen: devices[0].lastSeen,
-                      sensors: [
-                        {
-                          su_id: `${devices[0].box_id}_main_sensor`,
-                          readings: devices[0].currentReadings
-                            ? [
-                                {
-                                  moisture1:
-                                    devices[0].currentReadings.moisture1,
-                                  moisture2:
-                                    devices[0].currentReadings.moisture2,
-                                  moisture3:
-                                    devices[0].currentReadings.moisture3,
-                                  moisture4:
-                                    devices[0].currentReadings.moisture4,
-                                  temperature:
-                                    devices[0].currentReadings.temperature,
-                                  humidity: devices[0].currentReadings.humidity,
-                                  battery1:
-                                    devices[0].currentReadings.lipVoltage,
-                                  battery2:
-                                    devices[0].currentReadings.rtcBattery,
-                                  timestamp: new Date().toISOString(),
-                                },
-                              ]
-                            : [],
-                        },
-                      ],
+                      isOnline: devices.some((d) => d.isOnline),
+                      lastSeen: new Date(
+                        Math.max(
+                          ...devices.map((d) => new Date(d.lastSeen).getTime())
+                        )
+                      ).toISOString(),
+
+                      // ✅ THIS is the important part: build sensors[] from ALL devices
+                      sensors: devices.map((d) => ({
+                        su_id: d.box_id, // one sensor-series per device (box)
+                        readings: d.currentReadings
+                          ? [
+                              {
+                                moisture1: d.currentReadings.moisture1,
+                                moisture2: d.currentReadings.moisture2,
+                                moisture3: d.currentReadings.moisture3,
+                                moisture4: d.currentReadings.moisture4,
+                                temperature: d.currentReadings.temperature,
+                                humidity: d.currentReadings.humidity,
+                                battery1: d.currentReadings.lipVoltage,
+                                battery2: d.currentReadings.rtcBattery,
+                                timestamp:
+                                  d.lastSeen || new Date().toISOString(),
+                              },
+                            ]
+                          : [],
+                      })),
                     }}
                   />
                 )}
               </section>
 
-              {/* Error / Empty states (optional) */}
               {error && (
                 <div className="rounded-2xl bg-[#FDECEC] border border-[#F6CACA] text-[#7A1F1F] px-4 py-3">
                   Error loading device data: {error}
@@ -458,41 +726,20 @@ export default function Home() {
               )}
               {devices.length === 0 && !error && (
                 <div className="rounded-2xl bg-[#F4F7F6] border border-[#E7EEEB] p-8 text-center">
-                  No devices yet. Use “Add Device” to claim one.
+                  No devices for this filter. Use “Add Device” to claim one.
                 </div>
               )}
             </div>
 
-            {/* RIGHT SIDEBAR: Weather + NEW Analytics card */}
-            {/* RIGHT SIDEBAR: Weather + NEW Analytics cards */}
+            {/* RIGHT */}
             <aside className="lg:col-span-1 space-y-6">
-              {/* Analytics panel with card-style items */}
               <section className="rounded-2xl bg-[#f0f7f3] border border-[#E0EBE6] p-5">
                 <h3 className="text-lg font-lato font-bold mb-4 text-[#0B1B18]">
                   Analytics
                 </h3>
 
                 <div className="space-y-4">
-                  {/* Card 1: Total Devices */}
                   <div className="relative rounded-2xl bg-white border border-[#E6EFEA] shadow-sm p-5">
-                    {/* icon */}
-                    <div className="absolute right-4 top-4">
-                      <svg
-                        width="36"
-                        height="36"
-                        viewBox="0 0 24 24"
-                        className="text-transparent"
-                        style={{
-                          background:
-                            "linear-gradient(90deg, #F05A28 0%, #7B61FF 50%, #1E40FF 100%)",
-                          WebkitBackgroundClip: "text",
-                        }}
-                        fill="currentColor"
-                      >
-                        <path d="M7 7a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm5 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm5 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM7 13a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm5 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm5 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z" />
-                      </svg>
-                    </div>
-
                     <h4 className="font-lato text-2xl font-bold text-[#2E2F32] tracking-wide">
                       Total Devices
                     </h4>
@@ -502,30 +749,10 @@ export default function Home() {
                     <div className="mt-4 text-4xl font-lato font-bold text-[#1E6650]">
                       {total}
                     </div>
-
-                    {/* gradient bar */}
                     <div className="mt-5 h-[3px] rounded-full bg-gradient-to-r from-[#F05A28] via-[#7B61FF] to-[#1E40FF]" />
                   </div>
 
-                  {/* Card 2: Online */}
                   <div className="relative rounded-2xl bg-white border border-[#E6EFEA] shadow-sm p-5">
-                    <div className="absolute right-4 top-4">
-                      <svg
-                        width="36"
-                        height="36"
-                        viewBox="0 0 24 24"
-                        className="text-transparent"
-                        style={{
-                          background:
-                            "linear-gradient(90deg, #2F8F5A 0%, #7B61FF 60%, #1E40FF 100%)",
-                          WebkitBackgroundClip: "text",
-                        }}
-                        fill="currentColor"
-                      >
-                        <path d="M12 3a9 9 0 1 0 .001 18.001A9 9 0 0 0 12 3Zm-1 13-4-4 1.414-1.414L11 12.172l4.586-4.586L17 9l-6 7z" />
-                      </svg>
-                    </div>
-
                     <h4 className="font-lato text-2xl font-bold text-[#2E2F32]">
                       Online
                     </h4>
@@ -535,29 +762,10 @@ export default function Home() {
                     <div className="mt-4 text-4xl font-lato font-bold text-[#2F8F5A]">
                       {online}
                     </div>
-
                     <div className="mt-5 h-[3px] rounded-full bg-gradient-to-r from-[#2F8F5A] via-[#7B61FF] to-[#1E40FF]" />
                   </div>
 
-                  {/* Card 3: Offline */}
                   <div className="relative rounded-2xl bg-white border border-[#E6EFEA] shadow-sm p-5">
-                    <div className="absolute right-4 top-4">
-                      <svg
-                        width="36"
-                        height="36"
-                        viewBox="0 0 24 24"
-                        className="text-transparent"
-                        style={{
-                          background:
-                            "linear-gradient(90deg, #C14C4C 0%, #F05A28 50%, #7B61FF 100%)",
-                          WebkitBackgroundClip: "text",
-                        }}
-                        fill="currentColor"
-                      >
-                        <path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2Zm4.95 14.536-1.414 1.414L12 13.414l-3.536 3.536-1.414-1.414L10.586 12 7.05 8.464 8.464 7.05 12 10.586l3.536-3.536 1.414 1.414L13.414 12l3.536 3.536Z" />
-                      </svg>
-                    </div>
-
                     <h4 className="font-lato text-2xl font-bold text-[#2E2F32]">
                       Offline
                     </h4>
@@ -565,29 +773,10 @@ export default function Home() {
                     <div className="mt-4 text-4xl font-lato font-bold text-[#C14C4C]">
                       {offline}
                     </div>
-
                     <div className="mt-5 h-[3px] rounded-full bg-gradient-to-r from-[#C14C4C] via-[#F05A28] to-[#7B61FF]" />
                   </div>
 
-                  {/* Card 4: Avg Moisture */}
                   <div className="relative rounded-2xl bg-white border border-[#E6EFEA] shadow-sm p-5">
-                    <div className="absolute right-4 top-4">
-                      <svg
-                        width="36"
-                        height="36"
-                        viewBox="0 0 24 24"
-                        className="text-transparent"
-                        style={{
-                          background:
-                            "linear-gradient(90deg, #0FA3B1 0%, #7B61FF 60%, #1E40FF 100%)",
-                          WebkitBackgroundClip: "text",
-                        }}
-                        fill="currentColor"
-                      >
-                        <path d="M12 2c3.5 3.9 7 7.6 7 11a7 7 0 1 1-14 0c0-3.4 3.5-7.1 7-11Zm0 18a5 5 0 0 0 5-5c0-2.2-2.2-4.9-5-8.1C9.2 10.1 7 12.8 7 15a5 5 0 0 0 5 5Z" />
-                      </svg>
-                    </div>
-
                     <h4 className="font-lato text-2xl font-bold text-[#2E2F32]">
                       Avg Moisture
                     </h4>
@@ -597,13 +786,11 @@ export default function Home() {
                     <div className="mt-4 text-4xl font-lato font-bold text-[#0FA3B1]">
                       {Math.round(avgMoisture)}%
                     </div>
-
                     <div className="mt-5 h-[3px] rounded-full bg-gradient-to-r from-[#0FA3B1] via-[#7B61FF] to-[#1E40FF]" />
                   </div>
                 </div>
               </section>
 
-              {/* Weather panel (unchanged, already styled) */}
               <Weather />
             </aside>
           </div>
@@ -615,15 +802,103 @@ export default function Home() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white text-[#0B1B18] border border-[#E1EAE6] rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-semibold">Add Device</h3>
+              <h3 className="text-2xl font-semibold">Add Device</h3>
               <button
-                onClick={() => setShowClaimModal(false)}
+                onClick={() => {
+                  setShowClaimModal(false);
+                  setDeviceId("");
+                }}
                 className="text-[#536E65] hover:text-[#0B1B18]"
                 aria-label="Close"
               >
                 <XMarkIcon className="h-6 w-6" />
               </button>
             </div>
+
+            {farmsLoading && (
+              <p className="text-sm text-[#5a786c] mb-3">Loading farms…</p>
+            )}
+            {farmsErr && (
+              <p className="text-sm text-red-600 mb-3">{farmsErr}</p>
+            )}
+
+            <div className="mb-5">
+              <label className="block text-sm font-medium mb-2">Farm</label>
+              <select
+                value={selectedFarmId}
+                onChange={(e) => setSelectedFarmId(e.target.value)}
+                className="w-full px-3 py-2 bg-white border border-[#D9E6E0] rounded-md focus:outline-none focus:ring-2 focus:ring-[#2F6F5A]"
+              >
+                {farms.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+                <option value={NEW_FARM_VALUE}>➕ Create new farm…</option>
+              </select>
+
+              <div className="mt-2 text-xs text-[#5a786c]">
+                Manage farms in{" "}
+                <Link href="/farms" className="underline text-[#2F6F5A]">
+                  /farms
+                </Link>
+              </div>
+            </div>
+
+            {selectedFarmId === NEW_FARM_VALUE && (
+              <div className="mb-5 rounded-xl border border-[#D9E6E0] bg-[#F4F7F6] p-4">
+                <div className="text-sm font-semibold mb-3">
+                  Create a new farm
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium mb-1">
+                      Farm Name *
+                    </label>
+                    <input
+                      value={newFarmName}
+                      onChange={(e) => setNewFarmName(e.target.value)}
+                      placeholder="e.g., Veggielution Community Farm"
+                      className="w-full px-3 py-2 bg-white border border-[#D9E6E0] rounded-md focus:outline-none focus:ring-2 focus:ring-[#2F6F5A]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1">
+                      Location (optional)
+                    </label>
+                    <input
+                      value={newFarmLocation}
+                      onChange={(e) => setNewFarmLocation(e.target.value)}
+                      placeholder="e.g., San Jose, CA"
+                      className="w-full px-3 py-2 bg-white border border-[#D9E6E0] rounded-md focus:outline-none focus:ring-2 focus:ring-[#2F6F5A]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1">
+                      Description (optional)
+                    </label>
+                    <textarea
+                      value={newFarmDescription}
+                      onChange={(e) => setNewFarmDescription(e.target.value)}
+                      placeholder="Short notes about this farm…"
+                      className="w-full px-3 py-2 bg-white border border-[#D9E6E0] rounded-md focus:outline-none focus:ring-2 focus:ring-[#2F6F5A]"
+                      rows={3}
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleCreateFarmInline}
+                    disabled={creatingFarm}
+                    className="w-full px-4 py-2 bg-[#2F6F5A] hover:bg-[#275e4c] disabled:opacity-50 text-white rounded-md transition-colors"
+                  >
+                    {creatingFarm ? "Creating..." : "Create Farm"}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="mb-5">
               <label className="block text-sm font-medium mb-2">
@@ -645,14 +920,21 @@ export default function Home() {
               >
                 Cancel
               </button>
+
               <button
                 onClick={handleClaimDevice}
-                disabled={claiming}
+                disabled={claiming || selectedFarmId === NEW_FARM_VALUE}
                 className="flex-1 px-4 py-2 bg-[#2F6F5A] hover:bg-[#275e4c] disabled:opacity-50 text-white rounded-md transition-colors"
               >
                 {claiming ? "Adding..." : "Add Device"}
               </button>
             </div>
+
+            {selectedFarmId === NEW_FARM_VALUE && (
+              <p className="mt-3 text-xs text-[#5a786c]">
+                Create the farm first, then you can claim the device into it.
+              </p>
+            )}
           </div>
         </div>
       )}

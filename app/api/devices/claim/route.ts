@@ -1,3 +1,4 @@
+// app/api/devices/claim/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { getServerSession } from "next-auth";
@@ -6,6 +7,7 @@ import { ObjectId } from "mongodb";
 
 interface ClaimDeviceRequest {
   deviceId: string;
+  farmId: string;
 }
 
 interface ClaimResponse {
@@ -27,102 +29,110 @@ export async function POST(
   console.log("📞 Device claim request received");
 
   try {
-    // Step 1: Authenticate user
-    console.log("🔐 Checking user authentication...");
+    // 1) Auth
     const session = await getServerSession(authOptions);
-    console.log("Session data:", {
-      hasSession: !!session,
-      hasUser: !!session?.user,
-      userId: session?.user?.id,
-      userEmail: session?.user?.email,
-    });
 
     if (!session?.user?.id) {
-      console.log("❌ Authentication failed - no session or user ID");
       return NextResponse.json(
         { success: false, error: "Authentication required" },
         { status: 401 }
       );
     }
 
-    // Step 2: Get device ID from request
-    const body: ClaimDeviceRequest = await request.json();
-    const { deviceId } = body;
+    const isAdmin = session.user.role === "admin";
 
-    if (!deviceId?.trim()) {
+    // 2) Body
+    const body = (await request.json()) as Partial<ClaimDeviceRequest>;
+    const deviceId = (body.deviceId ?? "").trim();
+    const farmId = (body.farmId ?? "").trim();
+
+    if (!deviceId) {
       return NextResponse.json(
         { success: false, error: "Device ID is required" },
         { status: 400 }
       );
     }
 
-    const cleanDeviceId = deviceId.trim();
-    console.log(
-      `🔍 User ${session.user.email} attempting to claim device: ${cleanDeviceId}`
-    );
+    if (!farmId) {
+      return NextResponse.json(
+        { success: false, error: "Farm ID is required" },
+        { status: 400 }
+      );
+    }
 
-    // Step 3: Connect to database
-    console.log("💾 Connecting to database...");
+    if (!ObjectId.isValid(farmId)) {
+      return NextResponse.json(
+        { success: false, error: "Invalid Farm ID" },
+        { status: 400 }
+      );
+    }
+
+    // 3) DB
     const client = await clientPromise;
     const db = client.db("epiciot");
+
     const devicesCollection = db.collection("iot_devices");
     const usersCollection = db.collection("users");
-    console.log("✅ Database connection established");
+    const farmsCollection = db.collection("farms"); // assumes your farms are stored here
 
-    // Step 4: Check if device exists in database
-    console.log(`🔍 Looking for device: ${cleanDeviceId}`);
-    const device = await devicesCollection.findOne({ deviceId: cleanDeviceId });
-    console.log("Device lookup result:", {
-      found: !!device,
-      deviceId: device?.deviceId,
-      userId: device?.userId,
-      name: device?.name,
+    const currentUserId = session.user.id;
+
+    // 4) Validate farm ownership
+    // Admin note: you can decide if admins can claim into ANY farm.
+    // For now: require the farm to belong to the user even for admin.
+    const farm = await farmsCollection.findOne({
+      _id: new ObjectId(farmId),
+      ownerId: currentUserId,
     });
 
-    if (!device) {
-      console.log(`❌ Device not found: ${cleanDeviceId}`);
+    if (!farm) {
       return NextResponse.json(
         {
           success: false,
-          error: `Device "${cleanDeviceId}" does not exist in our system. Please verify the device ID.`,
+          error: "Farm not found or you do not own this farm.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // 5) Find device
+    const device = await devicesCollection.findOne({ deviceId });
+
+    if (!device) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Device "${deviceId}" does not exist in our system. Please verify the device ID.`,
         },
         { status: 404 }
       );
     }
 
-    console.log(`✅ Device found: ${cleanDeviceId}`);
-    console.log(`📋 Current device status: userId = "${device.userId}"`);
+    // 6) Assignment logic (same idea as your current code)
+    const isUnassigned =
+      !device.userId ||
+      device.userId === "UNASSIGNED" ||
+      device.userId === null;
 
-    // Step 5: 🔒 STRICT ASSIGNMENT CHECKS
+    const isOwnedByCurrent = device.userId === currentUserId;
+    const isOwnedByOther = !isUnassigned && !isOwnedByCurrent;
 
-    // Case A: Device already assigned to CURRENT user
-    if (device.userId === session.user.id) {
-      console.log(`⚠️ Device already owned by current user`);
+    if (isOwnedByCurrent) {
       return NextResponse.json(
         {
           success: false,
-          error: `You have already added device "${cleanDeviceId}" to your dashboard.`,
+          error: `You have already added device "${deviceId}" to your dashboard.`,
         },
         { status: 409 }
       );
     }
 
-    // Case B: Device assigned to ANOTHER user
-    if (
-      device.userId &&
-      device.userId !== "UNASSIGNED" &&
-      device.userId !== null
-    ) {
-      console.log(`❌ Device assigned to another user: ${device.userId}`);
-
-      // Get the other user's info for better error message
+    if (isOwnedByOther && !isAdmin) {
       try {
-        // Try to find user by string ID first, then try ObjectId if needed
         let assignedUser = await usersCollection.findOne({
           _id: device.userId,
         });
 
-        // If not found and userId looks like ObjectId, try with ObjectId
         if (!assignedUser && ObjectId.isValid(device.userId)) {
           assignedUser = await usersCollection.findOne({
             _id: new ObjectId(device.userId),
@@ -135,7 +145,7 @@ export async function POST(
         return NextResponse.json(
           {
             success: false,
-            error: `Device "${cleanDeviceId}" is already registered with ${assignedUserInfo}. Contact support if this is incorrect.`,
+            error: `Device "${deviceId}" is already registered with ${assignedUserInfo}. Contact support if this is incorrect.`,
           },
           { status: 409 }
         );
@@ -143,124 +153,86 @@ export async function POST(
         return NextResponse.json(
           {
             success: false,
-            error: `Device "${cleanDeviceId}" is already registered with another user.`,
+            error: `Device "${deviceId}" is already registered with another user.`,
           },
           { status: 409 }
         );
       }
     }
 
-    // Case C: Device is UNASSIGNED - Safe to claim! ✅
-    if (
-      device.userId === "UNASSIGNED" ||
-      device.userId === null ||
-      device.userId === undefined
-    ) {
-      console.log(`✅ Device is available for claiming`);
-
-      // Step 6: 🔄 ATOMIC ASSIGNMENT OPERATION
-      // Use atomic update to prevent race conditions if multiple users try to claim simultaneously
-      const updateResult = await devicesCollection.updateOne(
-        {
-          deviceId: cleanDeviceId,
-          // Double-check it's still unassigned at time of update
+    // 7) Claim update (atomic)
+    const claimFilter = isUnassigned
+      ? {
+          deviceId,
           $or: [
             { userId: "UNASSIGNED" },
             { userId: null },
             { userId: { $exists: false } },
           ],
+        }
+      : {
+          deviceId, // admin takeover path
+        };
+
+    const updateResult = await devicesCollection.updateOne(claimFilter, {
+      $set: {
+        userId: currentUserId,
+        farmId, // ✅ NEW
+        claimedAt: new Date(),
+        claimedBy: session.user.email,
+        updatedAt: new Date(),
+        status: "claimed",
+      },
+    });
+
+    if (updateResult.modifiedCount === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Device was claimed or changed while you were submitting. Please try again or choose a different device.",
         },
+        { status: 409 }
+      );
+    }
+
+    // 8) Transfer readings (keep as-is)
+    const sensorUpdateResult = await db
+      .collection("sensor_readings")
+      .updateMany(
+        { deviceId },
         {
           $set: {
-            userId: session.user.id,
-            claimedAt: new Date(),
-            claimedBy: session.user.email,
-            updatedAt: new Date(),
-            status: "claimed",
+            userId: currentUserId,
+            transferredAt: new Date(),
           },
         }
       );
 
-      // Step 7: Check if update was successful
-      if (updateResult.modifiedCount === 0) {
-        console.log(
-          `❌ Failed to claim device - may have been claimed by another user`
-        );
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Device was claimed by another user while you were submitting. Please try a different device.",
-          },
-          { status: 409 }
-        );
-      }
+    // 9) Response
+    const updatedDevice = await devicesCollection.findOne({ deviceId });
 
-      // Step 8: 📊 Transfer ALL historical sensor data to the claiming user
-      const sensorUpdateResult = await db
-        .collection("sensor_readings")
-        .updateMany(
-          { deviceId: cleanDeviceId },
-          {
-            $set: {
-              userId: session.user.id,
-              transferredAt: new Date(),
-            },
-          }
-        );
-
-      console.log(`🎉 Device successfully claimed!`);
-      console.log(`   Device: ${cleanDeviceId}`);
-      console.log(`   New Owner: ${session.user.email} (${session.user.id})`);
-      console.log(
-        `   Historical readings transferred: ${sensorUpdateResult.modifiedCount}`
-      );
-
-      // Step 9: Get updated device info for response
-      const updatedDevice = await devicesCollection.findOne({
-        deviceId: cleanDeviceId,
-      });
-
-      return NextResponse.json({
-        success: true,
-        message: `Device "${cleanDeviceId}" successfully added to your dashboard!`,
-        device: {
-          deviceId: updatedDevice?.deviceId || cleanDeviceId,
-          name: updatedDevice?.name || cleanDeviceId,
-          location: updatedDevice?.location || "Unknown Location",
-          historicalReadings: sensorUpdateResult.modifiedCount,
-          claimedAt: new Date().toISOString(),
-        },
-      });
-    }
-
-    // Step 10: Fallback case (shouldn't reach here)
-    console.log(`⚠️ Unexpected device state: ${device.userId}`);
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Device is in an unexpected state. Please contact support.",
+    return NextResponse.json({
+      success: true,
+      message: `Device "${deviceId}" successfully added to your dashboard!`,
+      device: {
+        deviceId: updatedDevice?.deviceId || deviceId,
+        name: updatedDevice?.name || deviceId,
+        location: updatedDevice?.location || "Unknown Location",
+        historicalReadings: sensorUpdateResult.modifiedCount,
+        claimedAt: new Date().toISOString(),
       },
-      { status: 500 }
-    );
+    });
   } catch (error) {
     console.error("❌ Error claiming device:", error);
-    console.error("Error details:", {
-      message: error instanceof Error ? error.message : "Unknown error",
-      stack: error instanceof Error ? error.stack : "No stack trace",
-    });
-
     return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to claim device. Please try again.",
-      },
+      { success: false, error: "Failed to claim device. Please try again." },
       { status: 500 }
     );
   }
 }
 
-// Add a simple GET method for testing
+// Simple GET for testing
 export async function GET(): Promise<
   NextResponse<{ message: string; timestamp: string }>
 > {

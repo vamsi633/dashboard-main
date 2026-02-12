@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import AdminUsersPanel from "./AdminUsersPanel";
 
 type Props = {
   signedInAs: string;
@@ -71,9 +72,9 @@ export default function AdminClient({ signedInAs }: Props) {
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
+      {/* top bar */}
       <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-          {/* Left: title */}
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
               Admin
@@ -86,13 +87,11 @@ export default function AdminClient({ signedInAs }: Props) {
             </p>
           </div>
 
-          {/* Right: Home + signed-in pill */}
           <div className="flex items-center gap-3">
             <Link
               href="/"
               className="hidden sm:inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-100 transition"
             >
-              {/* you can swap for an icon later */}
               <span className="text-sm">🏠</span>
               <span>Home</span>
             </Link>
@@ -113,7 +112,7 @@ export default function AdminClient({ signedInAs }: Props) {
       </header>
 
       <section className="mx-auto max-w-6xl px-4 py-8 space-y-8">
-        {/* Invite card */}
+        {/* INVITE CARD */}
         <div className="rounded-3xl bg-white shadow-sm border border-slate-200 overflow-hidden">
           <div className="h-1 w-full bg-gradient-to-r from-sky-500 via-indigo-500 to-emerald-400" />
 
@@ -135,7 +134,6 @@ export default function AdminClient({ signedInAs }: Props) {
               </span>
             </div>
 
-            {/* Form row */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
               <div className="flex-1">
                 <label className="mb-1 block text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
@@ -175,7 +173,6 @@ export default function AdminClient({ signedInAs }: Props) {
               </button>
             </div>
 
-            {/* Status / invite URL */}
             {status.type && (
               <div
                 className={`mt-2 rounded-2xl border px-4 py-3 text-xs ${
@@ -201,19 +198,14 @@ export default function AdminClient({ signedInAs }: Props) {
           </div>
         </div>
 
-        {/* Coming soon rows */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-3xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-900">
-              Coming soon: User roles
-            </h3>
-            <p className="mt-1 text-xs text-slate-500">
-              Configure who can view devices, edit configurations, or access
-              admin tools. We’ll hook this up to your{" "}
-              <span className="font-mono text-[11px]">users</span> collection.
-            </p>
-          </div>
+        {/* FULL-WIDTH ACCESS CONTROLS TABLE */}
+        {/* Access controls – full width */}
+        <div className="mt-6">
+          <AdminUsersPanel />
+        </div>
 
+        {/* Invite history + overview strip */}
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
           <div className="rounded-3xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900">
               Coming soon: Invite history
@@ -223,10 +215,7 @@ export default function AdminClient({ signedInAs }: Props) {
               lose their emails.
             </p>
           </div>
-        </div>
 
-        {/* Overview strip */}
-        <div className="grid gap-4 md:grid-cols-2">
           <div className="rounded-3xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
               Access controls
@@ -243,19 +232,6 @@ export default function AdminClient({ signedInAs }: Props) {
                 <div className="text-[11px] text-slate-500">You (for now)</div>
               </div>
             </div>
-          </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-gradient-to-r from-sky-50 via-emerald-50 to-white px-6 py-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-500">
-              Tip for production
-            </p>
-            <p className="mt-2 text-xs text-slate-600">
-              Once deployed, invite emails will use{" "}
-              <span className="font-mono text-[11px]">https://yourdomain</span>{" "}
-              instead of{" "}
-              <span className="font-mono text-[11px]">localhost</span>. Send an
-              invite to your own address first to verify everything looks good.
-            </p>
           </div>
         </div>
       </section>
