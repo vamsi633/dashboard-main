@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
+import { generateClaimToken } from "@/lib/claimToken";
 
 // Interfaces for JSON upload
 interface JsonUploadRequest {
@@ -21,6 +22,9 @@ interface DeviceDocument {
   createdAt: Date;
   status: string;
   currentReadings: null;
+
+  // ✅ add this
+  claimToken?: string;
 }
 
 interface DatabaseSensorReading {
@@ -123,19 +127,22 @@ export async function POST(
       console.log(`🆕 Device not found, auto-registering: ${deviceId}`);
 
       // Auto-register new device with UNASSIGNED status
-      const newDevice: DeviceDocument = {
+      const newDevice: DeviceDocument & { claimToken: string } = {
         deviceId: deviceId,
         name: `Auto-registered ${deviceId}`,
         location: "Field Location - Auto-registered",
-        latitude: 37.4221, // Campbell, CA coordinates
+        latitude: 37.4221,
         longitude: -121.9624,
-        userId: "UNASSIGNED", // 🎯 Available for later claiming
-        apiKey: apiKey, // Store the API key Arduino is using
+        userId: "UNASSIGNED",
+        apiKey: apiKey,
         isOnline: false,
         lastSeen: new Date(),
         createdAt: new Date(),
         status: "auto-registered",
         currentReadings: null,
+
+        // ✅ Step 0
+        claimToken: generateClaimToken(),
       };
 
       await db.collection("iot_devices").insertOne(newDevice);
@@ -158,6 +165,23 @@ export async function POST(
       );
     } else {
       console.log(`✅ Device found: ${deviceId} (User: ${device.userId})`);
+      // ✅ Step 0b: backfill claimToken for older devices that don't have it
+      if (!device.claimToken) {
+        const newToken = generateClaimToken();
+        await db
+          .collection("iot_devices")
+          .updateOne(
+            { deviceId },
+            { $set: { claimToken: newToken, updatedAt: new Date() } }
+          );
+
+        // keep local variable in sync (optional)
+        device.claimToken = newToken;
+
+        console.log(
+          `🧩 Backfilled claimToken for existing device: ${deviceId}`
+        );
+      }
     }
 
     // 📊 STEP 2: Create sensor reading

@@ -6,6 +6,9 @@ import { authOptions } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 import type { Document as MongoDocument } from "mongodb";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 interface IoTDevice extends MongoDocument {
   deviceId: string;
   name?: string;
@@ -21,6 +24,15 @@ interface IoTDevice extends MongoDocument {
   farmId?: string; // string form of farm _id
   apiKey?: string;
   createdAt?: Date;
+
+  // ✅ Step 5 support
+  installLocation?: {
+    lat: number;
+    lng: number;
+    accuracyM?: number;
+    source?: string;
+    capturedAt?: string | Date;
+  };
 }
 
 interface SensorReading extends MongoDocument {
@@ -100,6 +112,10 @@ type FarmDoc = {
   ownerId: string;
 };
 
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === "number" && Number.isFinite(v);
+}
+
 export async function GET(
   req: Request
 ): Promise<NextResponse<ApiResponse | ErrorResponse>> {
@@ -127,10 +143,6 @@ export async function GET(
           $or: [{ userId: session.user.id }, { claimedBy: email }],
         };
 
-    // Optional farm filter:
-    // farmId="__all__" => no filter
-    // farmId="__none__" => devices with no farmId
-    // farmId="<id>" => devices in that farm
     let farmFilter: Record<string, unknown> = {};
     if (farmIdParam && farmIdParam !== "__all__") {
       if (farmIdParam === "__none__") {
@@ -192,12 +204,30 @@ export async function GET(
       const farmId = typeof device.farmId === "string" ? device.farmId : null;
       const farmName = farmId ? farmNameById.get(farmId) ?? null : null;
 
+      // ✅ Step 5: prefer installLocation ONLY if it's valid numbers
+      const ilat = device.installLocation?.lat;
+      const ilng = device.installLocation?.lng;
+
+      const hasInstallLocation = isFiniteNumber(ilat) && isFiniteNumber(ilng);
+
+      const outLat = hasInstallLocation
+        ? ilat
+        : isFiniteNumber(device.latitude)
+        ? device.latitude
+        : 0;
+
+      const outLng = hasInstallLocation
+        ? ilng
+        : isFiniteNumber(device.longitude)
+        ? device.longitude
+        : 0;
+
       boxesWithReadings.push({
         box_id: device.deviceId,
         name: device.name || device.deviceId,
         location: device.location || "Unknown Location",
-        latitude: device.latitude || 0,
-        longitude: device.longitude || 0,
+        latitude: outLat,
+        longitude: outLng,
         isOnline: device.isOnline || false,
         lastSeen: device.lastSeen || new Date().toISOString(),
 

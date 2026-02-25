@@ -8,6 +8,28 @@ import { ObjectId } from "mongodb";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type InstallLocation = {
+  lat: number;
+  lng: number;
+  accuracyM?: number;
+  source?: string;
+  capturedAt?: string | Date;
+};
+
+type DeviceDoc = {
+  deviceId: string;
+  name?: string;
+  location?: string;
+  latitude?: number;
+  longitude?: number;
+  lastSeen?: string;
+  isOnline?: boolean;
+  farmId?: string;
+  userId?: string;
+  claimedBy?: string;
+  installLocation?: InstallLocation;
+};
+
 type DeviceOut = {
   deviceId: string;
   name?: string;
@@ -19,10 +41,15 @@ type DeviceOut = {
   farmId?: string;
 };
 
+type GetResp =
+  | { ok: true; devices: DeviceOut[] }
+  | { ok: false; error: string };
+type PostResp = { ok: true } | { ok: false; error: string };
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ farmId: string }> }
-) {
+): Promise<NextResponse<GetResp>> {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json(
@@ -43,12 +70,12 @@ export async function GET(
   const client = await clientPromise;
   const db = client.db("epiciot");
 
-  // 1) Farm must belong to user (unless admin)
   const isAdmin = session.user.role === "admin";
+
+  // 1) Farm must exist
   const farm = await db
     .collection("farms")
     .findOne({ _id: new ObjectId(farmId) });
-
   if (!farm) {
     return NextResponse.json(
       { ok: false, error: "Farm not found" },
@@ -56,6 +83,7 @@ export async function GET(
     );
   }
 
+  // 2) Ownership check (non-admin)
   if (!isAdmin && farm.ownerId !== session.user.id) {
     return NextResponse.json(
       { ok: false, error: "Forbidden" },
@@ -63,11 +91,17 @@ export async function GET(
     );
   }
 
-  // 2) List devices in that farm
+  // 3) SAFE device query
+  const email = (session.user.email ?? "").toLowerCase();
+
+  const deviceQuery: Record<string, unknown> = isAdmin
+    ? { farmId }
+    : { farmId, $or: [{ userId: session.user.id }, { claimedBy: email }] };
+
   const devices = await db
-    .collection("iot_devices")
-    .find({ farmId })
-    .project({
+    .collection<DeviceDoc>("iot_devices")
+    .find(deviceQuery)
+    .project<DeviceDoc>({
       _id: 0,
       deviceId: 1,
       name: 1,
@@ -77,16 +111,29 @@ export async function GET(
       lastSeen: 1,
       isOnline: 1,
       farmId: 1,
+      installLocation: 1,
     })
     .toArray();
 
-  return NextResponse.json({ ok: true, devices: devices as DeviceOut[] });
+  // Prefer installLocation if present (typed, no any)
+  const out: DeviceOut[] = devices.map((d) => ({
+    deviceId: d.deviceId,
+    name: d.name,
+    location: d.location,
+    latitude: d.installLocation?.lat ?? d.latitude,
+    longitude: d.installLocation?.lng ?? d.longitude,
+    lastSeen: d.lastSeen,
+    isOnline: d.isOnline,
+    farmId: d.farmId,
+  }));
+
+  return NextResponse.json({ ok: true, devices: out }, { status: 200 });
 }
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ farmId: string }> }
-) {
+): Promise<NextResponse<PostResp>> {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json(
@@ -116,12 +163,12 @@ export async function POST(
   const client = await clientPromise;
   const db = client.db("epiciot");
 
-  // 1) Farm must belong to user (unless admin)
   const isAdmin = session.user.role === "admin";
+
+  // Farm must exist
   const farm = await db
     .collection("farms")
     .findOne({ _id: new ObjectId(farmId) });
-
   if (!farm) {
     return NextResponse.json(
       { ok: false, error: "Farm not found" },
@@ -136,8 +183,10 @@ export async function POST(
     );
   }
 
-  // 2) Device must exist
-  const existing = await db.collection("iot_devices").findOne({ deviceId });
+  // Device must exist
+  const existing = await db
+    .collection<DeviceDoc>("iot_devices")
+    .findOne({ deviceId });
   if (!existing) {
     return NextResponse.json(
       { ok: false, error: "Device not found" },
@@ -145,11 +194,12 @@ export async function POST(
     );
   }
 
-  // 3) Must already be owned by this user (or admin can override)
+  // Must already be owned by this user (or admin can override)
   const ownedByUser =
     existing.userId === session.user.id ||
-    (session.user.email &&
-      existing.claimedBy?.toLowerCase?.() === session.user.email.toLowerCase());
+    (!!session.user.email &&
+      (existing.claimedBy ?? "").toLowerCase() ===
+        session.user.email.toLowerCase());
 
   if (!isAdmin && !ownedByUser) {
     return NextResponse.json(
@@ -161,10 +211,10 @@ export async function POST(
     );
   }
 
-  // 4) Assign farmId
+  // Assign farmId
   await db
     .collection("iot_devices")
     .updateOne({ deviceId }, { $set: { farmId, updatedAt: new Date() } });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true }, { status: 200 });
 }
