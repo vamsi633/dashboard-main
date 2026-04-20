@@ -1,7 +1,9 @@
 "use client";
+
 import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   BellIcon,
   ArrowRightOnRectangleIcon,
@@ -11,245 +13,393 @@ import {
 } from "@heroicons/react/24/outline";
 import { signOut, useSession } from "next-auth/react";
 
+const NAV_LINKS = [
+  { href: "/", label: "Home" },
+  { href: "/graphs", label: "Graphs" },
+  { href: "/sensors", label: "Sensors" },
+  { href: "/settings", label: "Settings" },
+  { href: "/announcements", label: "Announcements" },
+];
+
 const Navbar: React.FC = () => {
+  const pathname = usePathname();
   const { data: session, status } = useSession();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
-  // Toggle dropdown on profile click
-  const toggleDropdown = () => {
-    setIsDropdownOpen((prev) => !prev);
-  };
+  const toggleDropdown = () => setIsDropdownOpen((prev) => !prev);
+  const toggleMobileMenu = () => setIsMobileMenuOpen((prev) => !prev);
 
-  // Toggle mobile menu
-  const toggleMobileMenu = () => {
-    setIsMobileMenuOpen((prev) => !prev);
-  };
-
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
         dropdownRef.current &&
         !dropdownRef.current.contains(event.target as Node)
-      ) {
+      )
         setIsDropdownOpen(false);
-      }
       if (
         mobileMenuRef.current &&
         !mobileMenuRef.current.contains(event.target as Node)
-      ) {
+      )
         setIsMobileMenuOpen(false);
-      }
     };
-
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Get user name and profile image from session
   const userName = session?.user?.name || "User";
   const userEmail = session?.user?.email || "";
   const userImage =
     session?.user?.image ||
     `https://ui-avatars.com/api/?name=${encodeURIComponent(
       userName
-    )}&background=5b21b6&color=fff&size=96`;
+    )}&background=25421F&color=F3EDE1&size=96`;
+
+  // Live clock
+  const [timeStr, setTimeStr] = useState("");
+  useEffect(() => {
+    const update = () => {
+      const now = new Date();
+      const days = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+      ];
+      const h = now.getHours();
+      const m = String(now.getMinutes()).padStart(2, "0");
+      const ampm = h >= 12 ? "PM" : "AM";
+      const h12 = h % 12 || 12;
+      setTimeStr(`${days[now.getDay()]} · ${h12}:${m} ${ampm}`);
+    };
+    update();
+    const interval = setInterval(update, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
-    <nav className="fixed top-0 left-0 z-50 w-full h-[90px] bg-[#02142ced] text-[#D9DFF2] flex justify-between items-center shadow-lg px-6 sm:px-10 md:px-16 lg:px-24 xl:px-32 2xl:px-48">
-      {/* Logo on the left */}
-      <div className="flex items-center">
-        <Image
-          src="/logo.png"
-          alt="Logo"
-          width={200}
-          height={60}
-          className="object-contain"
-        />
-      </div>
-
-      {/* Middle: Navigation Links (Desktop) */}
-      <div className="hidden md:flex flex-1 justify-center space-x-8">
-        <Link
-          href="/"
-          className="text-[#FFFFFF] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
-        >
-          Home
-        </Link>
-        <Link
-          href="/graphs"
-          className="text-[#FFFFFF] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
-        >
-          Graphs
-        </Link>
-        <Link
-          href="/sensors"
-          className="text-[#FFFFFF] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
-        >
-          Sensors
-        </Link>
-        <Link
-          href="/settings"
-          className="text-[#FFFFFF] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
-        >
-          Settings
-        </Link>
-        <Link
-          href="/announcements"
-          className="text-[#FFFFFF] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
-        >
-          Announcements
-        </Link>
-      </div>
-
-      {/* Right side: Notification, Profile, and Mobile Menu Toggle */}
-      <div className="flex items-center space-x-4">
-        <button className="relative focus:outline-none">
-          <BellIcon className="h-8 w-8 text-[#FFFFFF] hover:text-gray-300 transition-colors stroke-2 fill-current" />
-          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-            3
-          </span>
-        </button>
-        <div className="relative" ref={dropdownRef}>
-          <button onClick={toggleDropdown} className="focus:outline-none">
-            {status === "loading" ? (
-              <div className="w-12 h-12 rounded-full bg-gray-700 animate-pulse" />
-            ) : (
-              <Image
-                src={userImage}
-                alt="Profile"
-                width={48}
-                height={48}
-                className="rounded-full border-2 border-[#D9DFF2] hover:border-gray-300 transition-all"
-              />
-            )}
-          </button>
-          {isDropdownOpen && (
-            <div className="absolute right-0 mt-2 w-64 bg-[#02142ced] rounded-lg shadow-lg py-2 px-2 z-50 border border-[#9CA3AF]">
-              <div className="px-3 py-3 border-b border-gray-700">
-                <div className="text-white font-medium truncate">
-                  {userName}
-                </div>
-                <div className="text-gray-400 text-sm truncate">
-                  {userEmail}
-                </div>
-              </div>
-              <div className="py-1">
-                <Link
-                  href="/profile"
-                  className="block px-3 py-2 text-gray-300 hover:bg-gray-800 hover:text-white rounded transition-colors"
-                  onClick={() => setIsDropdownOpen(false)}
-                >
-                  <div className="flex items-center">
-                    <UserCircleIcon className="h-5 w-5 mr-2" />
-                    Profile
-                  </div>
-                </Link>
-              </div>
-              <button
-                onClick={() => {
-                  signOut({ callbackUrl: "/auth/signin" });
-                  setIsDropdownOpen(false);
-                }}
-                className="w-full flex items-center justify-center px-3 py-2 bg-red-500 hover:bg-red-600 text-white transition-colors rounded-md mt-1"
-              >
-                <ArrowRightOnRectangleIcon className="h-5 w-5 mr-2" />
-                Logout
-              </button>
+    <nav
+      className="fixed top-0 left-0 z-50 w-full"
+      style={{
+        height: 72,
+        background: "rgba(243,237,225,0.88)",
+        backdropFilter: "blur(14px)",
+        WebkitBackdropFilter: "blur(14px)",
+        borderBottom: "1px solid #E5DBC6",
+        fontFamily: "'DM Sans', sans-serif",
+      }}
+    >
+      <div className="px-4 sm:px-6 lg:px-10 xl:px-12 mx-auto max-w-[1500px] h-full flex items-center justify-between">
+        {/* ── Brand / Logo ── */}
+        <Link href="/" className="flex items-center gap-3 group flex-shrink-0">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-105"
+            style={{
+              background: "#25421F",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1)",
+            }}
+          >
+            <svg
+              className="w-5 h-5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#F3EDE1"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 2C7 7 5 11 5 15a7 7 0 0 0 14 0c0-4-2-8-7-13z" />
+              <path d="M12 6v16" />
+            </svg>
+          </div>
+          <div className="hidden sm:block">
+            <div
+              className="text-[17px] font-medium tracking-tight"
+              style={{ fontFamily: "'Fraunces', serif", color: "#1E2A1F" }}
+            >
+              EPIC IoT
             </div>
-          )}
-        </div>
-        {/* Mobile Menu Toggle */}
-        <button
-          className="md:hidden focus:outline-none"
-          onClick={toggleMobileMenu}
-        >
-          {isMobileMenuOpen ? (
-            <XMarkIcon className="h-8 w-8 text-[#D9DFF2] hover:text-gray-300 transition-colors" />
-          ) : (
-            <Bars3Icon className="h-8 w-8 text-[#D9DFF2] hover:text-gray-300 transition-colors" />
-          )}
-        </button>
-      </div>
+            <div
+              className="text-[10px] uppercase tracking-[0.08em]"
+              style={{ color: "#7A8579" }}
+            >
+              Field Station Network
+            </div>
+          </div>
+        </Link>
 
-      {/* Mobile Menu */}
-      {isMobileMenuOpen && (
-        <div
-          ref={mobileMenuRef}
-          className="absolute top-[90px] left-0 w-full bg-[#0F111A] shadow-lg flex flex-col items-center space-y-4 py-4 md:hidden z-40"
-        >
-          {/* User info in mobile menu */}
-          {session && (
-            <div className="w-full px-6 pb-4 border-b border-gray-700">
-              <div className="flex items-center space-x-3">
+        {/* ── Desktop Navigation Links ── */}
+        <div className="hidden md:flex items-center gap-1">
+          {NAV_LINKS.map((link) => {
+            const isActive = pathname === link.href;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="relative px-3.5 py-2 rounded-xl text-[13px] font-medium transition-all"
+                style={{
+                  color: isActive ? "#25421F" : "#7A8579",
+                  background: isActive
+                    ? "rgba(216,226,204,0.5)"
+                    : "transparent",
+                }}
+              >
+                {link.label}
+                {isActive && (
+                  <span
+                    className="absolute bottom-0.5 left-3.5 right-3.5 h-[2px] rounded-full"
+                    style={{ background: "#3D6B3D" }}
+                  />
+                )}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* ── Right side: Time, Notification, Profile ── */}
+        <div className="flex items-center gap-3 sm:gap-4">
+          {/* Time (desktop only) */}
+          <span
+            className="hidden lg:block text-[13px]"
+            style={{ fontFamily: "'Fraunces', serif", color: "#7A8579" }}
+          >
+            {timeStr}
+          </span>
+
+          {/* Notification bell */}
+          <button
+            className="relative focus:outline-none group"
+            aria-label="Notifications"
+          >
+            <BellIcon
+              className="h-6 w-6 transition-colors"
+              style={{ color: "#4A5A4C" }}
+            />
+            <span
+              className="absolute -top-1.5 -right-1.5 text-[10px] font-bold rounded-full h-4.5 w-4.5 min-w-[18px] flex items-center justify-center px-1"
+              style={{ background: "#B5452D", color: "#FDFBF5" }}
+            >
+              3
+            </span>
+          </button>
+
+          {/* Profile */}
+          <div className="relative" ref={dropdownRef}>
+            <button onClick={toggleDropdown} className="focus:outline-none">
+              {status === "loading" ? (
+                <div
+                  className="w-9 h-9 rounded-full animate-pulse"
+                  style={{ background: "#E5DBC6" }}
+                />
+              ) : (
                 <Image
                   src={userImage}
                   alt="Profile"
-                  width={40}
-                  height={40}
-                  className="rounded-full"
+                  width={36}
+                  height={36}
+                  className="rounded-full transition-all hover:scale-105"
+                  style={{ border: "2px solid #E5DBC6" }}
                 />
-                <div>
-                  <div className="text-white font-medium text-sm">
-                    {userName}
+              )}
+            </button>
+
+            {/* Profile dropdown */}
+            {isDropdownOpen && (
+              <div
+                className="absolute right-0 mt-2 w-60 rounded-xl overflow-hidden z-50"
+                style={{
+                  background: "#FDFBF5",
+                  border: "1px solid #E5DBC6",
+                  boxShadow: "0 12px 32px -8px rgba(30,42,31,0.2)",
+                }}
+              >
+                <div
+                  className="px-4 py-3"
+                  style={{ borderBottom: "1px solid #E5DBC6" }}
+                >
+                  <div className="flex items-center gap-3">
+                    <Image
+                      src={userImage}
+                      alt=""
+                      width={36}
+                      height={36}
+                      className="rounded-full"
+                    />
+                    <div className="min-w-0">
+                      <div
+                        className="text-sm font-medium truncate"
+                        style={{ color: "#1E2A1F" }}
+                      >
+                        {userName}
+                      </div>
+                      <div
+                        className="text-[11px] truncate"
+                        style={{ color: "#7A8579" }}
+                      >
+                        {userEmail}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-gray-400 text-xs">{userEmail}</div>
+                </div>
+                <div className="py-1">
+                  <Link
+                    href="/profile"
+                    className="flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors hover:bg-[#F3EDE1]"
+                    style={{ color: "#4A5A4C" }}
+                    onClick={() => setIsDropdownOpen(false)}
+                  >
+                    <UserCircleIcon className="h-4 w-4" />
+                    Profile
+                  </Link>
+                  <Link
+                    href="/settings"
+                    className="flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors hover:bg-[#F3EDE1]"
+                    style={{ color: "#4A5A4C" }}
+                    onClick={() => setIsDropdownOpen(false)}
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                    Settings
+                  </Link>
+                </div>
+                <div
+                  className="px-3 py-2"
+                  style={{ borderTop: "1px solid #E5DBC6" }}
+                >
+                  <button
+                    onClick={() => {
+                      signOut({ callbackUrl: "/auth/signin" });
+                      setIsDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-90"
+                    style={{ background: "#B5452D", color: "#FDFBF5" }}
+                  >
+                    <ArrowRightOnRectangleIcon className="h-4 w-4" />
+                    Logout
+                  </button>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          <Link
-            href="/"
-            className="text-[#787d8f] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
-            onClick={() => setIsMobileMenuOpen(false)}
-          >
-            Home
-          </Link>
-          <Link
-            href="/graphs"
-            className="text-[#787d8f] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
-            onClick={() => setIsMobileMenuOpen(false)}
-          >
-            Graphs
-          </Link>
-          <Link
-            href="/sensors"
-            className="text-[#787d8f] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
-            onClick={() => setIsMobileMenuOpen(false)}
-          >
-            Sensors
-          </Link>
-          <Link
-            href="/settings"
-            className="text-[#787d8f] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
-            onClick={() => setIsMobileMenuOpen(false)}
-          >
-            Settings
-          </Link>
-          <Link
-            href="/announcements"
-            className="text-[#787d8f] hover:text-[#D9DFF2] transition-colors font-medium text-lg"
-            onClick={() => setIsMobileMenuOpen(false)}
-          >
-            Announcements
-          </Link>
-
-          {/* Logout button in mobile menu */}
+          {/* Mobile hamburger */}
           <button
-            onClick={() => {
-              signOut({ callbackUrl: "/auth/signin" });
-              setIsMobileMenuOpen(false);
-            }}
-            className="text-red-500 hover:text-red-400 transition-colors font-medium text-lg mt-4 pt-4 border-t border-gray-700 w-full"
+            className="md:hidden focus:outline-none"
+            onClick={toggleMobileMenu}
+            aria-label="Menu"
           >
-            Logout
+            {isMobileMenuOpen ? (
+              <XMarkIcon className="h-6 w-6" style={{ color: "#1E2A1F" }} />
+            ) : (
+              <Bars3Icon className="h-6 w-6" style={{ color: "#1E2A1F" }} />
+            )}
           </button>
+        </div>
+      </div>
+
+      {/* ── Mobile Menu ── */}
+      {isMobileMenuOpen && (
+        <div
+          ref={mobileMenuRef}
+          className="absolute top-[72px] left-0 w-full md:hidden z-40"
+          style={{
+            background: "#FDFBF5",
+            borderBottom: "1px solid #E5DBC6",
+            boxShadow: "0 12px 24px -8px rgba(30,42,31,0.15)",
+          }}
+        >
+          <div className="px-5 py-4 space-y-1">
+            {/* User info in mobile */}
+            {session && (
+              <div
+                className="flex items-center gap-3 pb-3 mb-2"
+                style={{ borderBottom: "1px solid #E5DBC6" }}
+              >
+                <Image
+                  src={userImage}
+                  alt=""
+                  width={36}
+                  height={36}
+                  className="rounded-full"
+                />
+                <div className="min-w-0">
+                  <div
+                    className="text-sm font-medium truncate"
+                    style={{ color: "#1E2A1F" }}
+                  >
+                    {userName}
+                  </div>
+                  <div
+                    className="text-[11px] truncate"
+                    style={{ color: "#7A8579" }}
+                  >
+                    {userEmail}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {NAV_LINKS.map((link) => {
+              const isActive = pathname === link.href;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="block px-3 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                  style={{
+                    color: isActive ? "#25421F" : "#7A8579",
+                    background: isActive
+                      ? "rgba(216,226,204,0.4)"
+                      : "transparent",
+                  }}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
+
+            <div
+              className="pt-3 mt-2"
+              style={{ borderTop: "1px solid #E5DBC6" }}
+            >
+              <Link
+                href="/profile"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm transition-colors"
+                style={{ color: "#4A5A4C" }}
+              >
+                <UserCircleIcon className="h-4 w-4" />
+                Profile
+              </Link>
+              <button
+                onClick={() => {
+                  signOut({ callbackUrl: "/auth/signin" });
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium mt-1 transition-all"
+                style={{ background: "#B5452D", color: "#FDFBF5" }}
+              >
+                <ArrowRightOnRectangleIcon className="h-4 w-4" />
+                Logout
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </nav>

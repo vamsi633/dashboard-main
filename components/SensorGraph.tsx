@@ -13,7 +13,6 @@ import {
   Brush,
 } from "recharts";
 
-// Reading shape now supports both legacy and Arduino-native battery fields
 interface Reading {
   moisture1: number;
   moisture2: number;
@@ -21,14 +20,11 @@ interface Reading {
   moisture4: number;
   temperature: number;
   humidity: number;
-
-  // Prefer Arduino names; keep legacy optional for backward compatibility
-  lipVoltage?: number; // LiPo battery voltage (V)
-  rtcBattery?: number; // RTC battery voltage (V)
-  battery1?: number; // legacy alias of lipVoltage
-  battery2?: number; // legacy alias of rtcBattery
-
-  timestamp: string; // ISO string
+  lipVoltage?: number;
+  rtcBattery?: number;
+  battery1?: number;
+  battery2?: number;
+  timestamp: string;
 }
 
 interface Sensor {
@@ -52,8 +48,8 @@ interface SensorGraphProps {
 }
 
 interface ChartRow {
-  ts: number; // numeric time
-  xLabel: string; // label shown on XAxis + Tooltip
+  ts: number;
+  xLabel: string;
   moisture1: number;
   moisture2: number;
   moisture3: number;
@@ -81,18 +77,29 @@ interface CustomTooltipProps {
 }
 
 function startOfDay(dateStr: string) {
-  // dateStr: YYYY-MM-DD
   const d = new Date(dateStr);
   d.setHours(0, 0, 0, 0);
   return d;
 }
 
 function endOfDay(dateStr: string) {
-  // inclusive end of day
   const d = new Date(dateStr);
   d.setHours(23, 59, 59, 999);
   return d;
 }
+
+/* ── Earthy color palette for chart lines ── */
+const COLORS = {
+  moisture1: "#6B95AE",
+  moisture2: "#4A7A8F",
+  moisture3: "#3A6A7F",
+  moisture4: "#2A5A6F",
+  moistureAvg: "#3D6B3D",
+  temperature: "#B5452D",
+  humidity: "#D98A2B",
+  battery1: "#7B6B8D",
+  battery2: "#9B8BAD",
+};
 
 export default function SensorGraph({ selectedBox }: SensorGraphProps) {
   const [selectedMetrics, setSelectedMetrics] = useState({
@@ -103,35 +110,21 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
     moistureAvg: true,
     temperature: true,
     humidity: true,
-    battery1: false, // toggles kept as-is
+    battery1: false,
     battery2: false,
   });
 
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
 
-  /**
-   * ✅ Key upgrade:
-   * - Uses ALL sensors (not just sensors[0])
-   * - Fixes date filtering (end date inclusive)
-   * - Aggregates readings across sensors by minute-bucket (safe + readable)
-   */
   const processedData = useMemo<ChartRow[]>(() => {
     const sensors = selectedBox?.sensors ?? [];
     if (sensors.length === 0) return [];
-
-    // Flatten readings across sensors
     const flat = sensors.flatMap((s) =>
-      (s.readings ?? []).map((r) => ({
-        su_id: s.su_id,
-        ...r,
-      }))
+      (s.readings ?? []).map((r) => ({ su_id: s.su_id, ...r }))
     );
-
     if (flat.length === 0) return [];
 
-    // Apply date filtering (inclusive end-of-day)
     let filtered = flat;
-
     if (dateRange.start) {
       const start = startOfDay(dateRange.start).getTime();
       filtered = filtered.filter(
@@ -142,23 +135,17 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
       const end = endOfDay(dateRange.end).getTime();
       filtered = filtered.filter((r) => new Date(r.timestamp).getTime() <= end);
     }
-
     if (filtered.length === 0) return [];
 
-    // Sort by timestamp
     filtered.sort(
       (a, b) =>
         new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
-    // Group by minute bucket so multiple sensors at similar times become one "overall" point
-    // Bucket format: YYYY-MM-DDTHH:MM (local-ish via Date -> ISO-like not guaranteed),
-    // so use numeric bucket = floor(ts / 60000)
     const buckets = new Map<number, { rows: typeof filtered }>();
-
     for (const r of filtered) {
       const ts = new Date(r.timestamp).getTime();
-      const bucket = Math.floor(ts / 60000); // per minute
+      const bucket = Math.floor(ts / 60000);
       const existing = buckets.get(bucket);
       if (existing) existing.rows.push(r);
       else buckets.set(bucket, { rows: [r] });
@@ -171,10 +158,7 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
 
     for (const [bucket, { rows }] of sortedBuckets) {
       const ts = bucket * 60000;
-
-      // average across sensors
       const sensorsCount = rows.length;
-
       const sum = (key: keyof Reading, fallbackKey?: keyof Reading) =>
         rows.reduce((acc, r) => {
           const v =
@@ -190,12 +174,9 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
       const m2 = sum("moisture2") / sensorsCount;
       const m3 = sum("moisture3") / sensorsCount;
       const m4 = sum("moisture4") / sensorsCount;
-
       const moistureAvg = (m1 + m2 + m3 + m4) / 4;
-
       const temperature = sum("temperature") / sensorsCount;
       const humidity = sum("humidity") / sensorsCount;
-
       const lipVoltage = sum("lipVoltage", "battery1") / sensorsCount;
       const rtcBattery = sum("rtcBattery", "battery2") / sensorsCount;
 
@@ -221,7 +202,6 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
         sensorsCount,
       });
     }
-
     return result;
   }, [selectedBox, dateRange]);
 
@@ -232,8 +212,20 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
   }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-lg">
-          <p className="text-gray-900 font-semibold mb-1">{label}</p>
+        <div
+          className="rounded-xl p-3.5 shadow-lg text-sm"
+          style={{
+            background: "#FDFBF5",
+            border: "1px solid #E5DBC6",
+            fontFamily: "'DM Sans', sans-serif",
+          }}
+        >
+          <p
+            className="font-semibold mb-1.5"
+            style={{ color: "#1E2A1F", fontFamily: "'Fraunces', serif" }}
+          >
+            {label}
+          </p>
           {payload.map((entry, index) => {
             const key = entry?.dataKey ?? "";
             const isVolt = key === "lipVoltage" || key === "rtcBattery";
@@ -244,8 +236,20 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
               ? val.toFixed(isVolt ? 2 : 1)
               : "—";
             return (
-              <p key={index} style={{ color: entry.color }}>
-                {`${entry.name}: ${formatted}${unit}`}
+              <p
+                key={index}
+                className="flex items-center gap-2 py-0.5"
+                style={{ color: entry.color }}
+              >
+                <span
+                  className="w-2.5 h-2.5 rounded-full inline-block"
+                  style={{ background: entry.color }}
+                />
+                <span style={{ color: "#4A5A4C" }}>{entry.name}:</span>
+                <span className="font-medium" style={{ color: "#1E2A1F" }}>
+                  {formatted}
+                  {unit}
+                </span>
               </p>
             );
           })}
@@ -257,7 +261,6 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
 
   const clearDateRange = () => setDateRange({ start: "", end: "" });
 
-  // If no data at all
   const totalReadings = (selectedBox?.sensors ?? []).reduce(
     (acc, s) => acc + (s.readings?.length ?? 0),
     0
@@ -265,173 +268,109 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
 
   if (!selectedBox || totalReadings === 0) {
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-        <h3 className="text-xl font-semibold mb-2 text-gray-900">
+      <div
+        className="rounded-xl p-8 text-center"
+        style={{ background: "#F3EDE1", border: "1px dashed #E5DBC6" }}
+      >
+        <h3
+          className="text-lg font-semibold mb-2"
+          style={{ color: "#1E2A1F", fontFamily: "'Fraunces', serif" }}
+        >
           No Data Available
         </h3>
-        <p className="text-gray-600">
+        <p style={{ color: "#7A8579" }}>
           No sensor readings available for graphing.
         </p>
       </div>
     );
   }
 
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6">
-      <h2 className="text-xl md:text-2xl font-bold mb-4 text-gray-900">
-        {selectedBox.name || selectedBox.box_id} - Sensor Data
-      </h2>
+  const metrics = [
+    { key: "moisture1", label: "Moisture 1" },
+    { key: "moisture2", label: "Moisture 2" },
+    { key: "moisture3", label: "Moisture 3" },
+    { key: "moisture4", label: "Moisture 4" },
+    { key: "moistureAvg", label: "Moisture Avg", bold: true },
+    { key: "temperature", label: "Temperature" },
+    { key: "humidity", label: "Humidity" },
+    { key: "battery1", label: "Battery 1 (LiPo)" },
+    { key: "battery2", label: "Battery 2 (RTC)" },
+  ];
 
-      {/* Controls */}
-      <div className="mb-6 space-y-4">
-        {/* Metric Selection */}
+  return (
+    <div>
+      {/* ── Controls ── */}
+      <div className="mb-5 space-y-4">
+        {/* Metric toggles */}
         <div>
-          <h3 className="text-sm font-semibold mb-3 text-gray-800">
+          <h3
+            className="text-[11px] font-medium uppercase tracking-[0.1em] mb-3"
+            style={{ color: "#7A8579" }}
+          >
             Select Metrics to Display
           </h3>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            <label className="flex items-center space-x-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={selectedMetrics.moisture1}
-                onChange={(e) =>
-                  setSelectedMetrics((prev) => ({
-                    ...prev,
-                    moisture1: e.target.checked,
-                  }))
-                }
-                className="rounded border-gray-300"
-              />
-              <span>Moisture 1</span>
-            </label>
-
-            <label className="flex items-center space-x-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={selectedMetrics.moisture2}
-                onChange={(e) =>
-                  setSelectedMetrics((prev) => ({
-                    ...prev,
-                    moisture2: e.target.checked,
-                  }))
-                }
-                className="rounded border-gray-300"
-              />
-              <span>Moisture 2</span>
-            </label>
-
-            <label className="flex items-center space-x-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={selectedMetrics.moisture3}
-                onChange={(e) =>
-                  setSelectedMetrics((prev) => ({
-                    ...prev,
-                    moisture3: e.target.checked,
-                  }))
-                }
-                className="rounded border-gray-300"
-              />
-              <span>Moisture 3</span>
-            </label>
-
-            <label className="flex items-center space-x-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={selectedMetrics.moisture4}
-                onChange={(e) =>
-                  setSelectedMetrics((prev) => ({
-                    ...prev,
-                    moisture4: e.target.checked,
-                  }))
-                }
-                className="rounded border-gray-300"
-              />
-              <span>Moisture 4</span>
-            </label>
-
-            <label className="flex items-center space-x-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={selectedMetrics.moistureAvg}
-                onChange={(e) =>
-                  setSelectedMetrics((prev) => ({
-                    ...prev,
-                    moistureAvg: e.target.checked,
-                  }))
-                }
-                className="rounded border-gray-300"
-              />
-              <span className="font-semibold">Moisture Avg</span>
-            </label>
-
-            <label className="flex items-center space-x-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={selectedMetrics.temperature}
-                onChange={(e) =>
-                  setSelectedMetrics((prev) => ({
-                    ...prev,
-                    temperature: e.target.checked,
-                  }))
-                }
-                className="rounded border-gray-300"
-              />
-              <span>Temperature</span>
-            </label>
-
-            <label className="flex items-center space-x-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={selectedMetrics.humidity}
-                onChange={(e) =>
-                  setSelectedMetrics((prev) => ({
-                    ...prev,
-                    humidity: e.target.checked,
-                  }))
-                }
-                className="rounded border-gray-300"
-              />
-              <span>Humidity</span>
-            </label>
-
-            <label className="flex items-center space-x-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={selectedMetrics.battery1}
-                onChange={(e) =>
-                  setSelectedMetrics((prev) => ({
-                    ...prev,
-                    battery1: e.target.checked,
-                  }))
-                }
-                className="rounded border-gray-300"
-              />
-              <span>Battery 1 (LiPo)</span>
-            </label>
-
-            <label className="flex items-center space-x-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={selectedMetrics.battery2}
-                onChange={(e) =>
-                  setSelectedMetrics((prev) => ({
-                    ...prev,
-                    battery2: e.target.checked,
-                  }))
-                }
-                className="rounded border-gray-300"
-              />
-              <span>Battery 2 (RTC)</span>
-            </label>
+          <div className="flex flex-wrap gap-2">
+            {metrics.map((m) => {
+              const checked =
+                selectedMetrics[m.key as keyof typeof selectedMetrics];
+              const color = COLORS[m.key as keyof typeof COLORS] || "#7A8579";
+              return (
+                <label
+                  key={m.key}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[12.5px] cursor-pointer transition-all"
+                  style={{
+                    background: checked ? color + "18" : "#F3EDE1",
+                    border: `1.5px solid ${checked ? color : "#E5DBC6"}`,
+                    color: checked ? color : "#7A8579",
+                    fontWeight: m.bold ? 600 : 400,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) =>
+                      setSelectedMetrics((prev) => ({
+                        ...prev,
+                        [m.key]: e.target.checked,
+                      }))
+                    }
+                    className="sr-only"
+                  />
+                  <span
+                    className="w-3 h-3 rounded-sm flex items-center justify-center flex-shrink-0"
+                    style={{
+                      background: checked ? color : "transparent",
+                      border: `1.5px solid ${checked ? color : "#B8BFBA"}`,
+                    }}
+                  >
+                    {checked && (
+                      <svg
+                        className="w-2 h-2 text-white"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M2 6l3 3 5-5" />
+                      </svg>
+                    )}
+                  </span>
+                  {m.label}
+                </label>
+              );
+            })}
           </div>
         </div>
 
-        {/* Date Range Filter */}
-        <div className="flex flex-wrap items-end gap-4">
+        {/* Date range */}
+        <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label className="block text-sm font-medium mb-1 text-gray-700">
+            <label
+              className="block text-[11px] font-medium uppercase tracking-wider mb-1"
+              style={{ color: "#7A8579" }}
+            >
               Start Date
             </label>
             <input
@@ -440,12 +379,19 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
               onChange={(e) =>
                 setDateRange((prev) => ({ ...prev, start: e.target.value }))
               }
-              className="bg-white border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
+              className="px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#3D6B3D]"
+              style={{
+                background: "#F3EDE1",
+                border: "1px solid #E5DBC6",
+                color: "#1E2A1F",
+              }}
             />
           </div>
-
           <div>
-            <label className="block text-sm font-medium mb-1 text-gray-700">
+            <label
+              className="block text-[11px] font-medium uppercase tracking-wider mb-1"
+              style={{ color: "#7A8579" }}
+            >
               End Date
             </label>
             <input
@@ -454,18 +400,29 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
               onChange={(e) =>
                 setDateRange((prev) => ({ ...prev, end: e.target.value }))
               }
-              className="bg-white border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
+              className="px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#3D6B3D]"
+              style={{
+                background: "#F3EDE1",
+                border: "1px solid #E5DBC6",
+                color: "#1E2A1F",
+              }}
             />
           </div>
-
           <button
             onClick={clearDateRange}
-            className="bg-gray-100 hover:bg-gray-200 text-gray-900 border border-gray-300 px-3 py-2 rounded text-sm"
+            className="px-4 py-2 rounded-xl text-sm font-medium transition-all hover:-translate-y-px"
+            style={{
+              background: "#F3EDE1",
+              border: "1px solid #E5DBC6",
+              color: "#1E2A1F",
+            }}
           >
             Clear
           </button>
-
-          <div className="text-sm text-gray-600">
+          <div
+            className="text-xs px-3 py-2 rounded-xl"
+            style={{ background: "#D8E2CC", color: "#25421F" }}
+          >
             Showing{" "}
             <span className="font-semibold">{processedData.length}</span> points
             (avg across sensors)
@@ -473,27 +430,40 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
         </div>
       </div>
 
-      {/* Graph */}
+      {/* ── Chart ── */}
       <div className="h-96 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={processedData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+            <CartesianGrid strokeDasharray="2 3" stroke="#E5DBC6" />
             <XAxis
               dataKey="xLabel"
-              stroke="#6B7280"
-              fontSize={12}
+              stroke="#7A8579"
+              fontSize={11}
               minTickGap={20}
+              fontFamily="'DM Sans', sans-serif"
             />
-            <YAxis stroke="#6B7280" fontSize={12} />
+            <YAxis
+              stroke="#7A8579"
+              fontSize={11}
+              fontFamily="'DM Sans', sans-serif"
+            />
             <Tooltip content={<CustomTooltip />} />
-            <Legend />
+            <Legend
+              wrapperStyle={{
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: 12,
+                paddingTop: 8,
+              }}
+              iconType="circle"
+              iconSize={8}
+            />
 
             {selectedMetrics.moisture1 && (
               <Line
                 type="monotone"
                 dataKey="moisture1"
-                stroke="#3B82F6"
-                strokeWidth={1}
+                stroke={COLORS.moisture1}
+                strokeWidth={1.5}
                 name="Moisture 1"
                 dot={false}
               />
@@ -502,8 +472,8 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
               <Line
                 type="monotone"
                 dataKey="moisture2"
-                stroke="#1D4ED8"
-                strokeWidth={1}
+                stroke={COLORS.moisture2}
+                strokeWidth={1.5}
                 name="Moisture 2"
                 dot={false}
               />
@@ -512,8 +482,8 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
               <Line
                 type="monotone"
                 dataKey="moisture3"
-                stroke="#2563EB"
-                strokeWidth={1}
+                stroke={COLORS.moisture3}
+                strokeWidth={1.5}
                 name="Moisture 3"
                 dot={false}
               />
@@ -522,8 +492,8 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
               <Line
                 type="monotone"
                 dataKey="moisture4"
-                stroke="#1E40AF"
-                strokeWidth={1}
+                stroke={COLORS.moisture4}
+                strokeWidth={1.5}
                 name="Moisture 4"
                 dot={false}
               />
@@ -532,18 +502,17 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
               <Line
                 type="monotone"
                 dataKey="moistureAvg"
-                stroke="#0EA5E9"
+                stroke={COLORS.moistureAvg}
                 strokeWidth={3}
                 name="Moisture Avg"
                 dot={false}
               />
             )}
-
             {selectedMetrics.temperature && (
               <Line
                 type="monotone"
                 dataKey="temperature"
-                stroke="#F97316"
+                stroke={COLORS.temperature}
                 strokeWidth={2}
                 name="Temperature"
                 dot={false}
@@ -553,18 +522,17 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
               <Line
                 type="monotone"
                 dataKey="humidity"
-                stroke="#10B981"
+                stroke={COLORS.humidity}
                 strokeWidth={2}
                 name="Humidity"
                 dot={false}
               />
             )}
-
             {selectedMetrics.battery1 && (
               <Line
                 type="monotone"
                 dataKey="lipVoltage"
-                stroke="#8B5CF6"
+                stroke={COLORS.battery1}
                 strokeWidth={2}
                 name="LiPo (V)"
                 dot={false}
@@ -574,63 +542,87 @@ export default function SensorGraph({ selectedBox }: SensorGraphProps) {
               <Line
                 type="monotone"
                 dataKey="rtcBattery"
-                stroke="#A855F7"
+                stroke={COLORS.battery2}
                 strokeWidth={2}
                 name="RTC (V)"
                 dot={false}
               />
             )}
 
-            <Brush dataKey="xLabel" height={30} stroke="#9CA3AF" />
+            <Brush
+              dataKey="xLabel"
+              height={28}
+              stroke="#B8BFBA"
+              fill="#F3EDE1"
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Summary Stats */}
-      <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-        <div className="bg-gray-50 border border-gray-200 rounded p-3">
-          <h4 className="text-gray-900 font-semibold">Moisture Avg Range</h4>
-          <p className="text-gray-700">
-            {processedData.length > 0
-              ? `${Math.min(...processedData.map((d) => d.moistureAvg)).toFixed(
-                  1
-                )}% - ${Math.max(
-                  ...processedData.map((d) => d.moistureAvg)
-                ).toFixed(1)}%`
-              : "No data"}
-          </p>
-        </div>
-
-        <div className="bg-gray-50 border border-gray-200 rounded p-3">
-          <h4 className="text-gray-900 font-semibold">Temperature Range</h4>
-          <p className="text-gray-700">
-            {processedData.length > 0
-              ? `${Math.min(...processedData.map((d) => d.temperature)).toFixed(
-                  1
-                )}°C - ${Math.max(
-                  ...processedData.map((d) => d.temperature)
-                ).toFixed(1)}°C`
-              : "No data"}
-          </p>
-        </div>
-
-        <div className="bg-gray-50 border border-gray-200 rounded p-3">
-          <h4 className="text-gray-900 font-semibold">Humidity Range</h4>
-          <p className="text-gray-700">
-            {processedData.length > 0
-              ? `${Math.min(...processedData.map((d) => d.humidity)).toFixed(
-                  1
-                )}% - ${Math.max(
-                  ...processedData.map((d) => d.humidity)
-                ).toFixed(1)}%`
-              : "No data"}
-          </p>
-        </div>
-
-        <div className="bg-gray-50 border border-gray-200 rounded p-3">
-          <h4 className="text-gray-900 font-semibold">Points</h4>
-          <p className="text-gray-700">{processedData.length}</p>
-        </div>
+      {/* ── Summary Stats ── */}
+      <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          {
+            label: "Moisture Avg Range",
+            value:
+              processedData.length > 0
+                ? `${Math.min(
+                    ...processedData.map((d) => d.moistureAvg)
+                  ).toFixed(1)}% – ${Math.max(
+                    ...processedData.map((d) => d.moistureAvg)
+                  ).toFixed(1)}%`
+                : "No data",
+            color: "#3D6B3D",
+          },
+          {
+            label: "Temperature Range",
+            value:
+              processedData.length > 0
+                ? `${Math.min(
+                    ...processedData.map((d) => d.temperature)
+                  ).toFixed(1)}°C – ${Math.max(
+                    ...processedData.map((d) => d.temperature)
+                  ).toFixed(1)}°C`
+                : "No data",
+            color: "#B5452D",
+          },
+          {
+            label: "Humidity Range",
+            value:
+              processedData.length > 0
+                ? `${Math.min(...processedData.map((d) => d.humidity)).toFixed(
+                    1
+                  )}% – ${Math.max(
+                    ...processedData.map((d) => d.humidity)
+                  ).toFixed(1)}%`
+                : "No data",
+            color: "#D98A2B",
+          },
+          {
+            label: "Data Points",
+            value: `${processedData.length}`,
+            color: "#6B95AE",
+          },
+        ].map((s) => (
+          <div
+            key={s.label}
+            className="rounded-xl p-4"
+            style={{ background: "#F3EDE1", border: "1px solid #E5DBC6" }}
+          >
+            <h4
+              className="text-[11px] font-medium uppercase tracking-wider mb-1"
+              style={{ color: "#7A8579" }}
+            >
+              {s.label}
+            </h4>
+            <p
+              className="text-sm font-medium"
+              style={{ color: s.color, fontFamily: "'Fraunces', serif" }}
+            >
+              {s.value}
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   );
