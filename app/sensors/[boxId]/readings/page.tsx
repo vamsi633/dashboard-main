@@ -2,34 +2,27 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import WaterDropLoader from "@/components/WaterDropLoader";
-import Link from "next/link";
+import type { Reading, ApiSensorResponse } from "@/types/sensors";
 
-interface Reading {
-  moisture: number;
-  moisture1: number;
-  moisture2: number;
-  moisture3: number;
-  moisture4: number;
-  temperature: number;
-  humidity: number;
-  lipVoltage: number;
-  rtcBattery: number;
-  dataPoints: number;
-  timestamp: string;
-}
+const HEADERS = ["Timestamp", "Temp", "Hum", "LiPo", "RTC", "Moisture", "M1", "M2", "M3", "M4", "DataPoints"];
+const tdCls = "border border-gray-700 px-3 py-2";
 
-interface ApiBox {
-  box_id: string;
-  readings: Reading[];
-}
-
-interface ApiResponse {
-  success: boolean;
-  boxes?: ApiBox[];
-  error?: string;
-}
+const rowCells = (r: Reading) => [
+  new Date(r.timestamp).toLocaleString(),
+  (r.temperature ?? 0).toFixed(1),
+  (r.humidity ?? 0).toFixed(1),
+  (r.lipVoltage ?? 0).toFixed(2),
+  (r.rtcBattery ?? 0).toFixed(2),
+  (r.moisture ?? 0).toFixed(1),
+  (r.moisture1 ?? 0).toFixed(1),
+  (r.moisture2 ?? 0).toFixed(1),
+  (r.moisture3 ?? 0).toFixed(1),
+  (r.moisture4 ?? 0).toFixed(1),
+  r.dataPoints ?? 0,
+];
 
 export default function SensorsAllPage() {
   const params = useParams<{ boxId: string }>();
@@ -41,27 +34,17 @@ export default function SensorsAllPage() {
 
   useEffect(() => {
     const run = async () => {
-      if (!boxId) {
-        setErr("Missing boxId");
-        setLoading(false);
-        return;
-      }
-
+      if (!boxId) { setErr("Missing boxId"); setLoading(false); return; }
       setErr(null);
       setLoading(true);
-
       try {
-        const res = await fetch("/api/dashboard/devices", {
-          cache: "no-store",
-        });
-        const json: ApiResponse = await res.json();
-
+        const res = await fetch("/api/dashboard/devices", { cache: "no-store" });
+        const json: ApiSensorResponse = await res.json();
         if (!res.ok || !json.success || !json.boxes) {
           setErr(json.error ?? "Failed to load devices");
           setRows([]);
           return;
         }
-
         const found = json.boxes.find((b) => b.box_id === boxId);
         setRows(found?.readings ?? []);
       } catch {
@@ -71,13 +54,10 @@ export default function SensorsAllPage() {
         setLoading(false);
       }
     };
-
     run();
   }, [boxId]);
 
-  const sorted = useMemo(() => {
-    return [...rows].sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
-  }, [rows]);
+  const sorted = useMemo(() => [...rows].sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1)), [rows]);
 
   if (loading) return <WaterDropLoader />;
 
@@ -92,21 +72,15 @@ export default function SensorsAllPage() {
                 <h1 className="text-3xl font-bold">All Data</h1>
                 <p className="text-gray-400 text-sm mt-1">Device: {boxId}</p>
               </div>
-              <Link href="/sensors" className="text-sm underline text-blue-400">
-                Back to Sensors
-              </Link>
+              <Link href="/sensors" className="text-sm underline text-blue-400">Back to Sensors</Link>
             </div>
 
             {err && (
-              <div className="mb-4 bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded-lg">
-                {err}
-              </div>
+              <div className="mb-4 bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded-lg">{err}</div>
             )}
 
             {!err && sorted.length === 0 && (
-              <div className="bg-gray-800 border border-gray-600 rounded-lg p-8 text-center text-gray-300">
-                No readings found.
-              </div>
+              <div className="bg-gray-800 border border-gray-600 rounded-lg p-8 text-center text-gray-300">No readings found.</div>
             )}
 
             {!err && sorted.length > 0 && (
@@ -115,64 +89,17 @@ export default function SensorsAllPage() {
                   <table className="w-full border-collapse text-sm">
                     <thead>
                       <tr>
-                        {[
-                          "Timestamp",
-                          "Temp",
-                          "Hum",
-                          "LiPo",
-                          "RTC",
-                          "Moisture",
-                          "M1",
-                          "M2",
-                          "M3",
-                          "M4",
-                          "DataPoints",
-                        ].map((h) => (
-                          <th
-                            key={h}
-                            className="border border-gray-700 px-3 py-2 bg-gray-800 text-left whitespace-nowrap"
-                          >
-                            {h}
-                          </th>
+                        {HEADERS.map((h) => (
+                          <th key={h} className="border border-gray-700 px-3 py-2 bg-gray-800 text-left whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {sorted.map((r, idx) => (
                         <tr key={idx} className="hover:bg-gray-900">
-                          <td className="border border-gray-700 px-3 py-2 whitespace-nowrap">
-                            {new Date(r.timestamp).toLocaleString()}
-                          </td>
-                          <td className="border border-gray-700 px-3 py-2">
-                            {(r.temperature ?? 0).toFixed(1)}
-                          </td>
-                          <td className="border border-gray-700 px-3 py-2">
-                            {(r.humidity ?? 0).toFixed(1)}
-                          </td>
-                          <td className="border border-gray-700 px-3 py-2">
-                            {(r.lipVoltage ?? 0).toFixed(2)}
-                          </td>
-                          <td className="border border-gray-700 px-3 py-2">
-                            {(r.rtcBattery ?? 0).toFixed(2)}
-                          </td>
-                          <td className="border border-gray-700 px-3 py-2">
-                            {(r.moisture ?? 0).toFixed(1)}
-                          </td>
-                          <td className="border border-gray-700 px-3 py-2">
-                            {(r.moisture1 ?? 0).toFixed(1)}
-                          </td>
-                          <td className="border border-gray-700 px-3 py-2">
-                            {(r.moisture2 ?? 0).toFixed(1)}
-                          </td>
-                          <td className="border border-gray-700 px-3 py-2">
-                            {(r.moisture3 ?? 0).toFixed(1)}
-                          </td>
-                          <td className="border border-gray-700 px-3 py-2">
-                            {(r.moisture4 ?? 0).toFixed(1)}
-                          </td>
-                          <td className="border border-gray-700 px-3 py-2">
-                            {r.dataPoints ?? 0}
-                          </td>
+                          {rowCells(r).map((v, i) => (
+                            <td key={i} className={i === 0 ? `${tdCls} whitespace-nowrap` : tdCls}>{v}</td>
+                          ))}
                         </tr>
                       ))}
                     </tbody>
