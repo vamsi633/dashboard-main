@@ -51,8 +51,8 @@ export async function setUserRole(userId: string, role: Role): Promise<void> {
 }
 
 /**
- * Delete a user and any claimed devices.
- * Adjust the collection / field names if your devices are stored differently.
+ * Delete a user, their claimed devices, and their NextAuth adapter records
+ * (accounts and sessions collections).
  */
 export async function deleteUserAndDevices(userId: string): Promise<{
   deletedUser: number;
@@ -62,8 +62,9 @@ export async function deleteUserAndDevices(userId: string): Promise<{
   const db = client.db(DB_NAME);
 
   const usersCol = db.collection<UserDoc>("users");
-  // change "devices" and "userId" if your schema is different
   const devicesCol = db.collection("devices");
+  const accountsCol = db.collection("accounts");
+  const sessionsCol = db.collection("sessions");
 
   let _id: ObjectId;
   try {
@@ -73,11 +74,33 @@ export async function deleteUserAndDevices(userId: string): Promise<{
   }
 
   const userRes = await usersCol.deleteOne({ _id });
-  // if you store userId as ObjectId string, this will still match
   const devicesRes = await devicesCol.deleteMany({ userId });
+  // NextAuth adapter stores userId as the stringified ObjectId
+  await accountsCol.deleteMany({ userId });
+  await sessionsCol.deleteMany({ userId });
 
   return {
     deletedUser: userRes.deletedCount ?? 0,
     deletedDevices: devicesRes.deletedCount ?? 0,
   };
+}
+
+/**
+ * Returns true if the given user is the only admin in the system.
+ * Used to prevent the last admin from deleting their own account.
+ */
+export async function isLastAdmin(userId: string): Promise<boolean> {
+  const col = await usersCollection();
+  const adminCount = await col.countDocuments({ role: "admin" });
+  if (adminCount !== 1) return false;
+
+  let _id: ObjectId;
+  try {
+    _id = new ObjectId(userId);
+  } catch {
+    return false;
+  }
+
+  const doc = await col.findOne({ _id }, { projection: { role: 1 } });
+  return doc?.role === "admin";
 }
