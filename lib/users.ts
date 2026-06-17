@@ -58,10 +58,8 @@ export interface DeleteUserResult {
 }
 
 /**
- * Delete flow:
- * 1. Check user exists
- * 2. Check for farms and devices under their account
- * 3. Delete farms, devices, NextAuth records, then the user
+ * Delete a user, their farms, devices, and NextAuth adapter records.
+ * Delete flow: farms/devices → accounts/sessions → user
  */
 export async function deleteUserAndDevices(userId: string): Promise<DeleteUserResult> {
   const client = await clientPromise;
