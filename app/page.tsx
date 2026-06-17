@@ -248,18 +248,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen" style={{ background: "#F3EDE1" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..900,0..100&family=DM+Sans:opsz,wght@9..40,300..700&display=swap');
-        .font-display { font-family: 'Fraunces', serif; font-variation-settings: 'opsz' 144, 'SOFT' 30; }
-        .font-display-soft { font-family: 'Fraunces', serif; font-variation-settings: 'opsz' 144, 'SOFT' 60; }
-        .font-body { font-family: 'DM Sans', sans-serif; }
-        @keyframes pulse-ring { 0% { transform: scale(0.9); opacity: 0.7; } 100% { transform: scale(2); opacity: 0; } }
-        .pulse-ring::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid currentColor; animation: pulse-ring 2s ease-out infinite; }
-        .grain-bg { background-image: radial-gradient(circle at 15% 10%, rgba(181,69,45,0.04), transparent 40%), radial-gradient(circle at 85% 90%, rgba(61,107,61,0.05), transparent 40%); }
-        .battery-fill-animate { transition: width 0.8s ease; }
-        .card-base { background: #FDFBF5; border: 1px solid #E5DBC6; box-shadow: 0 1px 0 rgba(30,42,31,0.04), 0 8px 24px -12px rgba(30,42,31,0.1); }
-      `}</style>
-
       <div className="px-4 sm:px-6 lg:px-10 xl:px-12 mx-auto w-full max-w-[1500px] grain-bg font-body">
         <Navbar />
         <main className="py-4 pt-[84px]" style={{ color: "#1E2A1F" }}>

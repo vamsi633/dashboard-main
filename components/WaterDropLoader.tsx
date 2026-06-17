@@ -23,19 +23,6 @@ export default function WaterDropLoader() {
         </g>
       </svg>
 
-      <style jsx>{`
-        .loader-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #fff; z-index: 9999; }
-        .plant          { width: clamp(180px, 24vh, 280px); height: auto; overflow: visible; }
-        .leaf           { transform-origin: 0% 100%; }
-        .leaf-sway-a { animation: swayA 3.2s ease-in-out infinite; }
-        .leaf-sway-b { animation: swayB 3.6s ease-in-out infinite; }
-        .leaf-sway-c { animation: swayC 3s   ease-in-out infinite; }
-        .leaf-sway-d { animation: swayD 2.8s ease-in-out infinite; }
-        @keyframes swayA { 0%,100% { transform: rotate(-2deg); } 50% { transform: rotate(3deg);  } }
-        @keyframes swayB { 0%,100% { transform: rotate(2deg);  } 50% { transform: rotate(-3deg); } }
-        @keyframes swayC { 0%,100% { transform: rotate(1deg);  } 50% { transform: rotate(-2deg); } }
-        @keyframes swayD { 0%,100% { transform: rotate(0deg);  } 50% { transform: rotate(2deg);  } }
-      `}</style>
     </div>
   );
 }

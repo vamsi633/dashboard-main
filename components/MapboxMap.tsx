@@ -207,19 +207,20 @@ export default function MapboxMap({
   }
 
   return (
-    <div ref={mapContainerRef} style={{ width: "100%", height }} className={`map-container rounded-lg overflow-hidden ${className}`}>
+    <div style={{ position: "relative", width: "100%", height }}>
+      <div
+        ref={mapContainerRef}
+        style={{ width: "100%", height: "100%" }}
+        className={`map-container rounded-lg overflow-hidden ${className}`}
+      />
       {!mapLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-800 bg-opacity-90 z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-800 bg-opacity-90 z-10 rounded-lg">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400 mx-auto mb-2" />
             <p className="text-gray-300 text-sm">Loading map...</p>
           </div>
         </div>
       )}
-      <style jsx>{`
-        .mapboxgl-popup { max-width: 420px; font: 12px/20px "Helvetica Neue", Arial, Helvetica, sans-serif; }
-        .mapboxgl-popup-content { background: #0f111a; color: #ffffff; border: 1px solid #9ca3af; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
-      `}</style>
     </div>
   );
 }

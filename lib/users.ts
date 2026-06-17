@@ -50,20 +50,28 @@ export async function setUserRole(userId: string, role: Role): Promise<void> {
   );
 }
 
-/**
- * Delete a user and any claimed devices.
- * Adjust the collection / field names if your devices are stored differently.
- */
-export async function deleteUserAndDevices(userId: string): Promise<{
+export interface DeleteUserResult {
+  found: boolean;
   deletedUser: number;
+  deletedFarms: number;
   deletedDevices: number;
-}> {
+}
+
+/**
+ * Delete flow:
+ * 1. Check user exists
+ * 2. Check for farms and devices under their account
+ * 3. Delete farms, devices, NextAuth records, then the user
+ */
+export async function deleteUserAndDevices(userId: string): Promise<DeleteUserResult> {
   const client = await clientPromise;
   const db = client.db(DB_NAME);
 
-  const usersCol = db.collection<UserDoc>("users");
-  // change "devices" and "userId" if your schema is different
-  const devicesCol = db.collection("devices");
+  const usersCol   = db.collection<UserDoc>("users");
+  const farmsCol   = db.collection("farms");
+  const devicesCol = db.collection("iot_devices");
+  const accountsCol = db.collection("accounts");
+  const sessionsCol = db.collection("sessions");
 
   let _id: ObjectId;
   try {
@@ -72,12 +80,51 @@ export async function deleteUserAndDevices(userId: string): Promise<{
     throw new Error("Invalid user id");
   }
 
+  // Step 1: check user exists
+  const user = await usersCol.findOne({ _id }, { projection: { _id: 1 } });
+  if (!user) {
+    return { found: false, deletedUser: 0, deletedFarms: 0, deletedDevices: 0 };
+  }
+
+  // Step 2 & 3: delete farms and devices (checked implicitly by deleteMany count)
+  const [farmsRes, devicesRes] = await Promise.all([
+    farmsCol.deleteMany({ ownerId: userId }),
+    devicesCol.deleteMany({ userId }),
+  ]);
+
+  // Delete NextAuth OAuth links and sessions
+  await Promise.all([
+    accountsCol.deleteMany({ userId }),
+    sessionsCol.deleteMany({ userId }),
+  ]);
+
+  // Delete the user last
   const userRes = await usersCol.deleteOne({ _id });
-  // if you store userId as ObjectId string, this will still match
-  const devicesRes = await devicesCol.deleteMany({ userId });
 
   return {
+    found: true,
     deletedUser: userRes.deletedCount ?? 0,
+    deletedFarms: farmsRes.deletedCount ?? 0,
     deletedDevices: devicesRes.deletedCount ?? 0,
   };
+}
+
+/**
+ * Returns true if the given user is the only admin in the system.
+ * Used to prevent the last admin from deleting their own account.
+ */
+export async function isLastAdmin(userId: string): Promise<boolean> {
+  const col = await usersCollection();
+  const adminCount = await col.countDocuments({ role: "admin" });
+  if (adminCount !== 1) return false;
+
+  let _id: ObjectId;
+  try {
+    _id = new ObjectId(userId);
+  } catch {
+    return false;
+  }
+
+  const doc = await col.findOne({ _id }, { projection: { role: 1 } });
+  return doc?.role === "admin";
 }
