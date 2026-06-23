@@ -1,5 +1,22 @@
+// lib/users.ts
 import clientPromise from "@/lib/mongodb";
 import { ObjectId, type Filter } from "mongodb";
+
+export type Role = "admin" | "user";
+
+type UserDoc = {
+  _id: ObjectId;
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+  role?: Role;
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
+};
+
+type DeviceDoc = {
+  deviceId?: string;
+};
 
 type DeleteUserResult = {
   deletedUser: boolean;
@@ -10,22 +27,42 @@ type DeleteUserResult = {
   sessionsDeleted: number;
 };
 
-type UserDoc = {
-  _id: ObjectId;
-  email?: string;
+export type AdminUserListItem = {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
   role?: Role;
-  updatedAt?: Date;
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
 };
 
-type DeviceDoc = {
-  deviceId?: string;
-};
+const DB_NAME = process.env.MONGODB_DB ?? "epiciot";
 
-export type Role = "admin" | "user";
+export async function listUsers(): Promise<AdminUserListItem[]> {
+  const client = await clientPromise;
+  const db = client.db(DB_NAME);
+
+  const users = await db
+    .collection<UserDoc>("users")
+    .find({})
+    .sort({ createdAt: -1 })
+    .toArray();
+
+  return users.map((u) => ({
+    id: u._id.toHexString(),
+    name: u.name ?? null,
+    email: u.email ?? null,
+    image: u.image ?? null,
+    role: u.role === "admin" ? "admin" : "user",
+    createdAt: u.createdAt ?? null,
+    updatedAt: u.updatedAt ?? null,
+  }));
+}
 
 export async function setUserRole(userId: string, role: Role) {
   const client = await clientPromise;
-  const db = client.db(process.env.MONGODB_DB ?? "epiciot");
+  const db = client.db(DB_NAME);
 
   const users = db.collection<UserDoc>("users");
 
@@ -53,7 +90,7 @@ export async function deleteUserAndDevices(
   userId: string,
 ): Promise<DeleteUserResult> {
   const client = await clientPromise;
-  const db = client.db(process.env.MONGODB_DB ?? "epiciot");
+  const db = client.db(DB_NAME);
 
   const users = db.collection<UserDoc>("users");
   const devices = db.collection("iot_devices");
