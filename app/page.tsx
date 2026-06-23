@@ -267,28 +267,28 @@ function AlertsPanel({ devices }: { devices: IoTDevice[] }) {
     });
 
   const bg: Record<string, string> = {
-    warn: "rgba(249,225,192,0.5)",
-    danger: "rgba(240,209,197,0.5)",
-    info: "rgba(213,226,234,0.5)",
-    ok: "rgba(216,226,204,0.3)",
+    warn: "rgba(240,223,202,0.7)",
+    danger: "rgba(240,212,212,0.7)",
+    info: "rgba(208,222,232,0.7)",
+    ok: "rgba(208,224,228,0.5)",
   };
   const bd: Record<string, string> = {
     warn: "#F0DBB4",
     danger: "#E8C3B5",
-    info: "#C9D6DF",
+    info: "#B8D4E8",
     ok: "#E5DBC6",
   };
   const ibg: Record<string, string> = {
     warn: "#F6E1C0",
     danger: "#F0D1C5",
-    info: "#D5E2EA",
-    ok: "#D8E2CC",
+    info: "#D5E5F0",
+    ok: "#D4EDDA",
   };
   const ic: Record<string, string> = {
     warn: "#D98A2B",
     danger: "#B5452D",
-    info: "#6B95AE",
-    ok: "#25421F",
+    info: "#4A7FA5",
+    ok: "#3D6B3D",
   };
 
   return (
@@ -318,7 +318,7 @@ function AlertsPanel({ devices }: { devices: IoTDevice[] }) {
             >
               {a.body}
             </div>
-            <div className="text-[11px] mt-1" style={{ color: "#7A8579" }}>
+            <div className="text-[11px] mt-1" style={{ color: "#88968C" }}>
               {a.time}
             </div>
           </div>
@@ -585,7 +585,7 @@ export default function Home() {
   if (tips.length === 0) tips.push("All sensors healthy and readings normal.");
 
   return (
-    <div className="min-h-screen" style={{ background: "#F3EDE1" }}>
+    <div className="min-h-screen" style={{ background: "#F2F5F3" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..900,0..100&family=DM+Sans:opsz,wght@9..40,300..700&display=swap');
         .font-display { font-family: 'Fraunces', serif; font-variation-settings: 'opsz' 144, 'SOFT' 30; }
@@ -593,7 +593,7 @@ export default function Home() {
         .font-body { font-family: 'DM Sans', sans-serif; }
         @keyframes pulse-ring { 0% { transform: scale(0.9); opacity: 0.7; } 100% { transform: scale(2); opacity: 0; } }
         .pulse-ring::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid currentColor; animation: pulse-ring 2s ease-out infinite; }
-        .grain-bg { background-image: radial-gradient(circle at 15% 10%, rgba(181,69,45,0.04), transparent 40%), radial-gradient(circle at 85% 90%, rgba(61,107,61,0.05), transparent 40%); }
+        .grain-bg { background-image: radial-gradient(circle at 15% 10%, rgba(181,69,45,0.03), transparent 40%), radial-gradient(circle at 85% 90%, rgba(61,107,61,0.05), transparent 40%), radial-gradient(circle at 60% 40%, rgba(74,127,165,0.03), transparent 45%); }
         .battery-fill-animate { transition: width 0.8s ease; }
         .card-base { background: #FDFBF5; border: 1px solid #E5DBC6; box-shadow: 0 1px 0 rgba(30,42,31,0.04), 0 8px 24px -12px rgba(30,42,31,0.1); }
       `}</style>
@@ -612,14 +612,14 @@ export default function Home() {
                 className="absolute -right-16 -top-16 w-64 h-64 rounded-full pointer-events-none"
                 style={{
                   background:
-                    "radial-gradient(circle, rgba(216,226,204,0.6) 0%, transparent 70%)",
+                    "radial-gradient(circle, rgba(208,224,228,0.4) 0%, transparent 70%)",
                 }}
               />
               <div
                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium mb-5 relative"
                 style={{
-                  background: online === total ? "#D8E2CC" : "#F6E1C0",
-                  color: online === total ? "#25421F" : "#D98A2B",
+                  background: online === total ? "#D4EDDA" : "#F6E1C0",
+                  color: online === total ? "#276838" : "#D98A2B",
                 }}
               >
                 <span
@@ -649,7 +649,12 @@ export default function Home() {
                   {online === total ? (
                     <>
                       Your fields are{" "}
-                      <em style={{ color: "#25421F" }}>looking happy</em> &nbsp;
+                      <em
+                        className="font-display-soft"
+                        style={{ color: "#3D6B3D" }}
+                      >
+                        looking happy
+                      </em>{" "}
                       today.
                     </>
                   ) : (
@@ -680,7 +685,7 @@ export default function Home() {
                 <div className="flex items-center gap-2" ref={filterRef}>
                   <span
                     className="text-[11px] font-medium uppercase tracking-[0.1em]"
-                    style={{ color: "#7A8579" }}
+                    style={{ color: "#88968C" }}
                   >
                     Filter
                   </span>
@@ -706,7 +711,7 @@ export default function Home() {
                       <ChevronDownIcon
                         className="h-3.5 w-3.5 ml-auto flex-shrink-0 transition-transform"
                         style={{
-                          color: "#7A8579",
+                          color: "#88968C",
                           transform: filterOpen ? "rotate(180deg)" : "",
                         }}
                       />
@@ -721,7 +726,7 @@ export default function Home() {
                         style={{
                           background: "#FDFBF5",
                           border: "1px solid #E5DBC6",
-                          boxShadow: "0 12px 32px -8px rgba(30,42,31,0.2)",
+                          boxShadow: "0 12px 32px -8px rgba(26,43,58,0.2)",
                         }}
                       >
                         {[
@@ -739,7 +744,7 @@ export default function Home() {
                               setScrollPosition(0);
                               setFilterOpen(false);
                             }}
-                            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm transition-colors hover:bg-[#F3EDE1]"
+                            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm transition-colors hover:bg-[#F2F5F3]"
                             style={{
                               color:
                                 farmFilter === opt.value
@@ -754,7 +759,7 @@ export default function Home() {
                                 border: `1.5px solid ${
                                   farmFilter === opt.value
                                     ? "#3D6B3D"
-                                    : "#D5DBC6"
+                                    : "#E5DBC6"
                                 }`,
                                 background:
                                   farmFilter === opt.value
@@ -787,9 +792,9 @@ export default function Home() {
                   onClick={openClaimModal}
                   className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-all hover:-translate-y-px"
                   style={{
-                    background: "#25421F",
+                    background: "#88968C",
                     color: "#FDFBF5",
-                    boxShadow: "0 4px 12px -4px rgba(37,66,31,0.4)",
+                    boxShadow: "0 4px 12px -4px rgba(136,150,140,0.4)",
                   }}
                 >
                   <PlusIcon className="h-4 w-4" />
@@ -802,13 +807,13 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.05 }}
               className="lg:col-span-2 rounded-3xl p-7 relative overflow-hidden"
-              style={{ background: "#25421F", color: "#FDFBF5" }}
+              style={{ background: "#1E3A2F", color: "#FDFBF5" }}
             >
               <div
                 className="absolute -left-10 -bottom-10 w-44 h-44 rounded-full pointer-events-none"
                 style={{
                   background:
-                    "radial-gradient(circle, rgba(230,179,37,0.12) 0%, transparent 70%)",
+                    "radial-gradient(circle, rgba(193,122,53,0.12) 0%, transparent 70%)",
                 }}
               />
               <div
@@ -833,12 +838,12 @@ export default function Home() {
                   <li
                     key={i}
                     className="flex gap-3 text-[13.5px] leading-relaxed"
-                    style={{ color: "rgba(253,251,245,0.85)" }}
+                    style={{ color: "rgba(255,255,255,0.85)" }}
                   >
                     <span
                       className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px]"
                       style={{
-                        background: "rgba(230,179,37,0.15)",
+                        background: "rgba(193,122,53,0.15)",
                         color: "#E6B325",
                       }}
                     >
@@ -878,8 +883,8 @@ export default function Home() {
                     : avgHumidity < 30
                     ? "Low"
                     : "Comfortable range",
-                color: "#6B95AE",
-                bg: "#D5E2EA",
+                color: "#4A7FA5",
+                bg: "#D5E5F0",
                 icon: (
                   <path d="M12 2c3 4 6 8 6 12a6 6 0 1 1-12 0c0-4 3-8 6-12z" />
                 ),
@@ -889,7 +894,7 @@ export default function Home() {
                 value: `${Math.round(avgMoisture)}`,
                 unit: "%",
                 desc: avgMoisture < 30 ? "Dry — irrigate" : "Healthy",
-                color: "#25421F",
+                color: "#88968C",
                 bg: "#D8E2CC",
                 icon: <path d="M3 17h18M5 13h14M7 9h10M9 5h6" />,
               },
@@ -929,7 +934,7 @@ export default function Home() {
                 </div>
                 <div
                   className="text-[10px] uppercase tracking-[0.1em] mb-1"
-                  style={{ color: "#7A8579" }}
+                  style={{ color: "#88968C" }}
                 >
                   {s.label}
                 </div>
@@ -937,7 +942,7 @@ export default function Home() {
                   {s.value}
                   <span
                     className="text-lg ml-0.5"
-                    style={{ color: "#7A8579", fontFamily: "'DM Sans'" }}
+                    style={{ color: "#88968C", fontFamily: "'DM Sans'" }}
                   >
                     {s.unit}
                   </span>
@@ -958,13 +963,13 @@ export default function Home() {
                     Each{" "}
                     <span
                       className="italic font-display-soft"
-                      style={{ color: "#25421F" }}
+                      style={{ color: "#3D6B3D" }}
                     >
                       station
                     </span>
                     , up close
                   </h2>
-                  <p className="text-xs mt-0.5" style={{ color: "#7A8579" }}>
+                  <p className="text-xs mt-0.5" style={{ color: "#88968C" }}>
                     Live readings from across the farm
                   </p>
                 </div>
@@ -1031,50 +1036,60 @@ export default function Home() {
                           4
                         ).toFixed(1)
                       : "N/A";
+                    const moistureVal = r
+                      ? typeof r.moisture === "number"
+                        ? r.moisture
+                        : (r.moisture1 +
+                            r.moisture2 +
+                            r.moisture3 +
+                            r.moisture4) /
+                          4
+                      : 0;
+                    const moistureStatus =
+                      moistureVal < 25
+                        ? "Dry — irrigate"
+                        : moistureVal < 40
+                        ? "Moderate"
+                        : "Healthy";
+                    const moistureColor =
+                      moistureVal < 25
+                        ? "#B5452D"
+                        : moistureVal < 40
+                        ? "#D98A2B"
+                        : "#3D6B3D";
                     const needsFarm = !device.farmId;
                     const bat = r ? batteryLabel(r.lipVoltage) : null;
                     return (
                       <div
                         key={device.box_id}
-                        className="device-card flex-shrink-0 w-80 rounded-2xl p-5 relative overflow-hidden transition-all hover:-translate-y-1 cursor-pointer card-base"
+                        className="device-card flex-shrink-0 w-72 rounded-2xl relative overflow-hidden transition-all hover:-translate-y-1 cursor-pointer card-base"
                         style={{
-                          borderLeftWidth: device.isOnline ? 1 : 3,
+                          borderLeftWidth: 3,
                           borderLeftColor: device.isOnline
-                            ? "#E5DBC6"
+                            ? "#3D6B3D"
                             : "#B5452D",
                         }}
                       >
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <h3 className="font-display text-lg font-medium tracking-tight">
+                        {/* Header */}
+                        <div className="flex justify-between items-start p-4 pb-2">
+                          <div className="min-w-0">
+                            <h3 className="font-display text-[17px] font-medium tracking-tight truncate">
                               {device.name || device.box_id}
                             </h3>
                             <p
-                              className="flex items-center gap-1.5 text-xs mt-0.5"
-                              style={{ color: "#7A8579" }}
+                              className="text-[11px] mt-0.5 truncate"
+                              style={{ color: "#88968C" }}
                             >
-                              <svg
-                                className="w-3 h-3"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 1 1 18 0z" />
-                                <circle cx="12" cy="10" r="3" />
-                              </svg>
                               {device.farmName || "No farm"} · {device.location}
                             </p>
                           </div>
                           <span
-                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium flex-shrink-0 ml-2"
                             style={{
                               background: device.isOnline
-                                ? "#D8E2CC"
+                                ? "#D4EDDA"
                                 : "#F0D1C5",
-                              color: device.isOnline ? "#25421F" : "#B5452D",
+                              color: device.isOnline ? "#276838" : "#B5452D",
                             }}
                           >
                             <span
@@ -1088,17 +1103,18 @@ export default function Home() {
                             {device.isOnline ? "Online" : "Offline"}
                           </span>
                         </div>
+
                         {needsFarm && farms.length > 0 && (
                           <div
-                            className="mb-3 p-3 rounded-xl"
+                            className="mx-4 mb-2 p-3 rounded-xl"
                             style={{
-                              background: "#F3EDE1",
+                              background: "#F2F5F3",
                               border: "1px solid #E5DBC6",
                             }}
                           >
                             <label
                               className="block text-[11px] font-medium uppercase tracking-wider mb-1.5"
-                              style={{ color: "#7A8579" }}
+                              style={{ color: "#88968C" }}
                             >
                               Assign to farm
                             </label>
@@ -1128,144 +1144,176 @@ export default function Home() {
                             {assigningDeviceId === device.box_id && (
                               <p
                                 className="text-[11px] mt-1"
-                                style={{ color: "#7A8579" }}
+                                style={{ color: "#88968C" }}
                               >
                                 Assigning…
                               </p>
                             )}
                           </div>
                         )}
+
                         {r ? (
-                          <div className="grid grid-cols-2 gap-3 mb-3">
-                            {[
-                              {
-                                l: "Moisture",
-                                v:
-                                  typeof r.moisture === "number"
-                                    ? r.moisture.toFixed(1)
-                                    : individualAvg,
-                                u: "%",
-                                c: "#6B95AE",
-                                d: "M12 2.5s6 7 6 12a6 6 0 0 1-12 0c0-5 6-12 6-12z",
-                              },
-                              {
-                                l: "Temperature",
-                                v: r.temperature.toFixed(1),
-                                u: "°C",
-                                c: "#B5452D",
-                                d: "M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z",
-                              },
-                              {
-                                l: "Humidity",
-                                v: r.humidity.toFixed(1),
-                                u: "%",
-                                c: "#6B95AE",
-                                d: "M12 2c3 4 6 8 6 12a6 6 0 1 1-12 0c0-4 3-8 6-12z",
-                              },
-                              {
-                                l: "Readings",
-                                v: `${r.dataPoints}`,
-                                u: "",
-                                c: "#D98A2B",
-                                d: "M12 6v6l4 2",
-                              },
-                            ].map((m) => (
-                              <div key={m.l} className="flex flex-col gap-0.5">
+                          <>
+                            {/* Moisture hero */}
+                            <div className="text-center px-4 pt-2 pb-3">
+                              <div
+                                className="text-[10px] uppercase tracking-[0.12em] mb-1"
+                                style={{ color: "#88968C" }}
+                              >
+                                Soil Moisture
+                              </div>
+                              <div
+                                className="font-display text-[42px] leading-none tracking-tight"
+                                style={{ color: "#1E2A1F" }}
+                              >
+                                {typeof r.moisture === "number"
+                                  ? r.moisture.toFixed(1)
+                                  : individualAvg}
                                 <span
-                                  className="text-[10px] uppercase tracking-wider flex items-center gap-1"
-                                  style={{ color: "#7A8579" }}
+                                  className="text-lg"
+                                  style={{
+                                    color: "#88968C",
+                                    fontFamily: "'DM Sans'",
+                                  }}
                                 >
-                                  <svg
-                                    className="w-2.5 h-2.5"
-                                    style={{ color: m.c }}
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2.5"
-                                  >
-                                    {m.l === "Readings" ? (
-                                      <>
-                                        <circle cx="12" cy="12" r="10" />
-                                        <path d={m.d} />
-                                      </>
-                                    ) : (
-                                      <path d={m.d} />
-                                    )}
-                                  </svg>
-                                  {m.l}
+                                  %
                                 </span>
-                                <span className="font-display text-xl tracking-tight">
-                                  {m.v}
+                              </div>
+                              <div
+                                className="text-[12px] font-medium mt-1"
+                                style={{ color: moistureColor }}
+                              >
+                                {moistureStatus}
+                              </div>
+                              <div
+                                className="mt-2 h-2 rounded-full overflow-hidden mx-auto max-w-[200px]"
+                                style={{ background: "#E5DBC6" }}
+                              >
+                                <div
+                                  className="h-full rounded-full transition-all"
+                                  style={{
+                                    width: `${Math.min(moistureVal, 100)}%`,
+                                    background: moistureColor,
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Temp + Humidity grid */}
+                            <div className="grid grid-cols-2 gap-2 mx-4 mb-3">
+                              <div
+                                className="rounded-xl px-3 py-2.5"
+                                style={{
+                                  background: "#F3EDE1",
+                                  border: "1px solid #E5DBC6",
+                                }}
+                              >
+                                <div
+                                  className="text-[10px] uppercase tracking-wider mb-0.5"
+                                  style={{ color: "#88968C" }}
+                                >
+                                  Temperature
+                                </div>
+                                <div className="font-display text-xl tracking-tight">
+                                  {r.temperature.toFixed(1)}
                                   <span
                                     className="text-xs ml-0.5"
                                     style={{
-                                      color: "#7A8579",
+                                      color: "#88968C",
                                       fontFamily: "'DM Sans'",
                                     }}
                                   >
-                                    {m.u}
+                                    °C
                                   </span>
-                                </span>
+                                </div>
                               </div>
-                            ))}
-                          </div>
+                              <div
+                                className="rounded-xl px-3 py-2.5"
+                                style={{
+                                  background: "#F3EDE1",
+                                  border: "1px solid #E5DBC6",
+                                }}
+                              >
+                                <div
+                                  className="text-[10px] uppercase tracking-wider mb-0.5"
+                                  style={{ color: "#88968C" }}
+                                >
+                                  Humidity
+                                </div>
+                                <div className="font-display text-xl tracking-tight">
+                                  {r.humidity.toFixed(1)}
+                                  <span
+                                    className="text-xs ml-0.5"
+                                    style={{
+                                      color: "#88968C",
+                                      fontFamily: "'DM Sans'",
+                                    }}
+                                  >
+                                    %
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Battery + time footer */}
+                            <div
+                              className="flex items-center justify-between px-4 py-2.5"
+                              style={{ borderTop: "1px solid #E5DBC6" }}
+                            >
+                              {bat ? (
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="w-7 h-2.5 rounded-sm relative"
+                                    style={{
+                                      border: "1.5px solid #4A5A4C",
+                                      padding: 1,
+                                    }}
+                                  >
+                                    <div
+                                      className="h-full rounded-[1px] battery-fill-animate"
+                                      style={{
+                                        width: `${bat.pct}%`,
+                                        background: bat.color,
+                                      }}
+                                    />
+                                    <div
+                                      className="absolute -right-1 top-1/2 -translate-y-1/2 w-0.5 h-1.5 rounded-r-sm"
+                                      style={{ background: "#4A5A4C" }}
+                                    />
+                                  </div>
+                                  <span
+                                    className="text-[11px]"
+                                    style={{ color: "#4A5A4C" }}
+                                  >
+                                    {r!.lipVoltage.toFixed(2)}V
+                                  </span>
+                                </div>
+                              ) : (
+                                <span
+                                  className="text-[11px]"
+                                  style={{ color: "#88968C" }}
+                                >
+                                  —
+                                </span>
+                              )}
+                              <span
+                                className="text-[11px]"
+                                style={{ color: "#88968C" }}
+                              >
+                                Last seen {timeAgo(device.lastSeen)}
+                              </span>
+                            </div>
+                          </>
                         ) : (
                           <div
-                            className="py-6 text-center rounded-xl mb-3"
-                            style={{ background: "#F3EDE1" }}
+                            className="py-8 text-center mx-4 mb-3 rounded-xl"
+                            style={{ background: "#F2F5F3" }}
                           >
-                            <p className="text-sm" style={{ color: "#7A8579" }}>
+                            <p className="text-sm" style={{ color: "#88968C" }}>
                               No sensor data
                             </p>
                           </div>
                         )}
-                        <div
-                          className="flex items-center justify-between pt-3"
-                          style={{ borderTop: "1px dashed #E5DBC6" }}
-                        >
-                          {bat ? (
-                            <div className="flex items-center gap-2">
-                              <div
-                                className="w-7 h-2.5 rounded-sm relative"
-                                style={{
-                                  border: "1.5px solid #4A5A4C",
-                                  padding: 1,
-                                }}
-                              >
-                                <div
-                                  className="h-full rounded-[1px] battery-fill-animate"
-                                  style={{
-                                    width: `${bat.pct}%`,
-                                    background: bat.color,
-                                  }}
-                                />
-                                <div
-                                  className="absolute -right-1 top-1/2 -translate-y-1/2 w-0.5 h-1.5 rounded-r-sm"
-                                  style={{ background: "#4A5A4C" }}
-                                />
-                              </div>
-                              <span
-                                className="text-[11px]"
-                                style={{ color: "#4A5A4C" }}
-                              >
-                                {r!.lipVoltage.toFixed(2)}V · {bat.text}
-                              </span>
-                            </div>
-                          ) : (
-                            <span
-                              className="text-[11px]"
-                              style={{ color: "#7A8579" }}
-                            >
-                              —
-                            </span>
-                          )}
-                          <span
-                            className="text-[11px]"
-                            style={{ color: "#7A8579" }}
-                          >
-                            {timeAgo(device.lastSeen)}
-                          </span>
-                        </div>
                       </div>
                     );
                   })}
@@ -1275,7 +1323,7 @@ export default function Home() {
           ) : (
             !error && (
               <div className="rounded-2xl p-10 text-center card-base mb-6">
-                <p style={{ color: "#7A8579" }}>
+                <p style={{ color: "#88968C" }}>
                   No devices. Use &ldquo;Add Device&rdquo; to get started.
                 </p>
               </div>
@@ -1300,11 +1348,11 @@ export default function Home() {
             {devices.filter((d) => d.currentReadings).length > 0 && (
               <div
                 className="rounded-2xl p-5"
-                style={{ background: "#25421F", color: "#FDFBF5" }}
+                style={{ background: "#1E3545", color: "#FDFBF5" }}
               >
                 <p
                   className="text-[10px] uppercase tracking-widest mb-4"
-                  style={{ color: "#E6B325" }}
+                  style={{ color: "#7BBAD4" }}
                 >
                   Battery Fleet Health
                 </p>
@@ -1326,7 +1374,7 @@ export default function Home() {
                           </span>
                           <div
                             className="flex-1 h-1.5 rounded-full overflow-hidden"
-                            style={{ background: "rgba(253,251,245,0.15)" }}
+                            style={{ background: "rgba(255,255,255,0.15)" }}
                           >
                             <div
                               className="h-full rounded-full battery-fill-animate"
@@ -1351,7 +1399,7 @@ export default function Home() {
               <div className="rounded-2xl p-5 card-base">
                 <p
                   className="text-[10px] uppercase tracking-[0.1em] mb-3"
-                  style={{ color: "#7A8579" }}
+                  style={{ color: "#88968C" }}
                 >
                   Moisture by Station
                 </p>
@@ -1366,7 +1414,7 @@ export default function Home() {
                     .map((d) => {
                       const val = getMoistureVal(d.currentReadings);
                       const bc =
-                        val < 30 ? "#D98A2B" : val > 70 ? "#6B95AE" : "#3D6B3D";
+                        val < 30 ? "#D98A2B" : val > 70 ? "#4A7FA5" : "#3D6B3D";
                       return (
                         <div key={d.box_id}>
                           <div className="flex justify-between text-[11px] mb-1">
@@ -1410,7 +1458,7 @@ export default function Home() {
                   <h2 className="font-display text-xl tracking-tight">
                     Your fields at a glance
                   </h2>
-                  <p className="text-xs mt-0.5" style={{ color: "#7A8579" }}>
+                  <p className="text-xs mt-0.5" style={{ color: "#88968C" }}>
                     Tap any marker for details
                   </p>
                 </div>
@@ -1445,11 +1493,11 @@ export default function Home() {
                 <div
                   className="rounded-xl p-10 text-center"
                   style={{
-                    background: "#F3EDE1",
+                    background: "#F2F5F3",
                     border: "1px dashed #E5DBC6",
                   }}
                 >
-                  <p style={{ color: "#7A8579" }}>Add devices to see the map</p>
+                  <p style={{ color: "#88968C" }}>Add devices to see the map</p>
                 </div>
               )}
             </div>
@@ -1458,7 +1506,7 @@ export default function Home() {
                 <h2 className="font-display text-xl tracking-tight">
                   Things to check on
                 </h2>
-                <p className="text-xs mt-0.5" style={{ color: "#7A8579" }}>
+                <p className="text-xs mt-0.5" style={{ color: "#88968C" }}>
                   What needs you today
                 </p>
               </div>
@@ -1474,12 +1522,12 @@ export default function Home() {
                   Sensor{" "}
                   <span
                     className="italic font-display-soft"
-                    style={{ color: "#25421F" }}
+                    style={{ color: "#4A7FA5" }}
                   >
                     trends
                   </span>
                 </h2>
-                <p className="text-xs mt-0.5" style={{ color: "#7A8579" }}>
+                <p className="text-xs mt-0.5" style={{ color: "#88968C" }}>
                   Historical readings with date range & metric toggles
                 </p>
               </div>
@@ -1537,7 +1585,7 @@ export default function Home() {
             style={{
               background: "#FDFBF5",
               border: "1px solid #E5DBC6",
-              boxShadow: "0 24px 48px -12px rgba(30,42,31,0.25)",
+              boxShadow: "0 24px 48px -12px rgba(26,43,58,0.25)",
               color: "#1E2A1F",
             }}
           >
@@ -1551,13 +1599,13 @@ export default function Home() {
                   setDeviceId("");
                 }}
                 className="w-8 h-8 flex items-center justify-center rounded-full"
-                style={{ background: "#F3EDE1", color: "#7A8579" }}
+                style={{ background: "#F2F5F3", color: "#88968C" }}
               >
                 <XMarkIcon className="h-4 w-4" />
               </button>
             </div>
             {farmsLoading && (
-              <p className="text-sm mb-3" style={{ color: "#7A8579" }}>
+              <p className="text-sm mb-3" style={{ color: "#88968C" }}>
                 Loading…
               </p>
             )}
@@ -1569,7 +1617,7 @@ export default function Home() {
             <div className="mb-5">
               <label
                 className="block text-[11px] font-medium uppercase tracking-wider mb-2"
-                style={{ color: "#7A8579" }}
+                style={{ color: "#88968C" }}
               >
                 Farm
               </label>
@@ -1577,7 +1625,7 @@ export default function Home() {
                 value={selectedFarmId}
                 onChange={(e) => setSelectedFarmId(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#3D6B3D]"
-                style={{ background: "#F3EDE1", border: "1px solid #E5DBC6" }}
+                style={{ background: "#F2F5F3", border: "1px solid #E5DBC6" }}
               >
                 {farms.map((f) => (
                   <option key={f.id} value={f.id}>
@@ -1586,7 +1634,7 @@ export default function Home() {
                 ))}
                 <option value={NEW_FARM_VALUE}>+ Create new farm…</option>
               </select>
-              <div className="mt-2 text-[11px]" style={{ color: "#7A8579" }}>
+              <div className="mt-2 text-[11px]" style={{ color: "#88968C" }}>
                 Manage in{" "}
                 <Link
                   href="/farms"
@@ -1600,7 +1648,7 @@ export default function Home() {
             {selectedFarmId === NEW_FARM_VALUE && (
               <div
                 className="mb-5 rounded-xl p-4"
-                style={{ background: "#F3EDE1", border: "1px solid #E5DBC6" }}
+                style={{ background: "#F2F5F3", border: "1px solid #E5DBC6" }}
               >
                 <div
                   className="text-sm font-semibold mb-3"
@@ -1612,7 +1660,7 @@ export default function Home() {
                   <div>
                     <label
                       className="block text-[11px] font-medium uppercase tracking-wider mb-1"
-                      style={{ color: "#7A8579" }}
+                      style={{ color: "#88968C" }}
                     >
                       Name *
                     </label>
@@ -1630,7 +1678,7 @@ export default function Home() {
                   <div>
                     <label
                       className="block text-[11px] font-medium uppercase tracking-wider mb-1"
-                      style={{ color: "#7A8579" }}
+                      style={{ color: "#88968C" }}
                     >
                       Location
                     </label>
@@ -1648,7 +1696,7 @@ export default function Home() {
                   <div>
                     <label
                       className="block text-[11px] font-medium uppercase tracking-wider mb-1"
-                      style={{ color: "#7A8579" }}
+                      style={{ color: "#88968C" }}
                     >
                       Description
                     </label>
@@ -1677,7 +1725,7 @@ export default function Home() {
             <div className="mb-5">
               <label
                 className="block text-[11px] font-medium uppercase tracking-wider mb-2"
-                style={{ color: "#7A8579" }}
+                style={{ color: "#88968C" }}
               >
                 Device ID
               </label>
@@ -1687,14 +1735,14 @@ export default function Home() {
                 onChange={(e) => setDeviceId(e.target.value)}
                 placeholder="GREENHOUSE_BOX_001"
                 className="w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#3D6B3D]"
-                style={{ background: "#F3EDE1", border: "1px solid #E5DBC6" }}
+                style={{ background: "#F2F5F3", border: "1px solid #E5DBC6" }}
               />
             </div>
             <div className="flex space-x-3">
               <button
                 onClick={() => setShowClaimModal(false)}
                 className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium"
-                style={{ background: "#F3EDE1", border: "1px solid #E5DBC6" }}
+                style={{ background: "#F2F5F3", border: "1px solid #E5DBC6" }}
               >
                 Cancel
               </button>
@@ -1708,7 +1756,7 @@ export default function Home() {
               </button>
             </div>
             {selectedFarmId === NEW_FARM_VALUE && (
-              <p className="mt-3 text-[11px]" style={{ color: "#7A8579" }}>
+              <p className="mt-3 text-[11px]" style={{ color: "#88968C" }}>
                 Create farm first, then claim device.
               </p>
             )}

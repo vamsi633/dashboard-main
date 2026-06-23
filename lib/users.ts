@@ -1,83 +1,119 @@
-// lib/users.ts
 import clientPromise from "@/lib/mongodb";
-import { ObjectId, type Collection } from "mongodb";
+import { ObjectId } from "mongodb";
 
-export type Role = "admin" | "user";
+type DeleteUserResult = {
+  deletedUser: boolean;
+  devicesUnassigned: number;
+  readingsDeleted: number;
+  farmsDeleted: number;
+  accountsDeleted: number;
+  sessionsDeleted: number;
+};
 
-export interface UserDoc {
-  _id: ObjectId;
-  email: string;
-  name?: string | null;
-  image?: string | null;
-  role?: Role;
-}
+type UserDoc = Record<string, unknown> & {
+  _id?: ObjectId | string;
+  email?: string;
+};
 
-const DB_NAME = process.env.MONGODB_DB ?? "epiciot";
+type DeviceDoc = {
+  deviceId?: string;
+};
 
-async function usersCollection(): Promise<Collection<UserDoc>> {
+export async function deleteUserAndDevices(
+  userId: string,
+): Promise<DeleteUserResult> {
   const client = await clientPromise;
-  return client.db(DB_NAME).collection<UserDoc>("users");
-}
+  const db = client.db(process.env.MONGODB_DB ?? "epiciot");
 
-/** List all users (you can add pagination later) */
-export async function listUsers(): Promise<UserDoc[]> {
-  const col = await usersCollection();
-  const users = await col
-    .find({}, { projection: { email: 1, name: 1, image: 1, role: 1 } })
-    .sort({ createdAt: -1 })
+  const users = db.collection<UserDoc>("users");
+  const devices = db.collection("iot_devices");
+  const readings = db.collection("sensor_readings");
+  const farms = db.collection("farms");
+  const accounts = db.collection<Record<string, unknown>>("accounts");
+  const sessions = db.collection<Record<string, unknown>>("sessions");
+
+  const userObjectId = ObjectId.isValid(userId) ? new ObjectId(userId) : null;
+
+  const userLookupFilters: Record<string, unknown>[] = [{ _id: userId }];
+  if (userObjectId) userLookupFilters.unshift({ _id: userObjectId });
+
+  const user = await users.findOne({ $or: userLookupFilters });
+
+  if (!user) {
+    return {
+      deletedUser: false,
+      devicesUnassigned: 0,
+      readingsDeleted: 0,
+      farmsDeleted: 0,
+      accountsDeleted: 0,
+      sessionsDeleted: 0,
+    };
+  }
+
+  const userEmail =
+    typeof user.email === "string" ? user.email.toLowerCase() : "";
+
+  const ownedDevices = await devices
+    .find({
+      $or: [{ userId }, ...(userEmail ? [{ claimedBy: userEmail }] : [])],
+    })
+    .project<DeviceDoc>({ _id: 0, deviceId: 1 })
     .toArray();
-  return users;
-}
 
-/** Update a user's role */
-export async function setUserRole(userId: string, role: Role): Promise<void> {
-  const col = await usersCollection();
+  const deviceIds = ownedDevices
+    .map((d) => d.deviceId)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
 
-  let _id: ObjectId;
-  try {
-    _id = new ObjectId(userId);
-  } catch {
-    throw new Error("Invalid user id");
-  }
+  const readingsDeleted =
+    deviceIds.length > 0
+      ? await readings.deleteMany({ deviceId: { $in: deviceIds } })
+      : { deletedCount: 0 };
 
-  await col.updateOne(
-    { _id },
-    {
-      $set: {
-        role,
-      },
-    }
-  );
-}
+  const farmsDeleted = await farms.deleteMany({ ownerId: userId });
 
-/**
- * Delete a user and any claimed devices.
- * Adjust the collection / field names if your devices are stored differently.
- */
-export async function deleteUserAndDevices(userId: string): Promise<{
-  deletedUser: number;
-  deletedDevices: number;
-}> {
-  const client = await clientPromise;
-  const db = client.db(DB_NAME);
+  const devicesUnassigned =
+    deviceIds.length > 0
+      ? await devices.updateMany(
+          { deviceId: { $in: deviceIds } },
+          {
+            $set: {
+              userId: "UNASSIGNED",
+              status: "auto-registered",
+              updatedAt: new Date(),
+            },
+            $unset: {
+              farmId: "",
+              claimedBy: "",
+              claimedAt: "",
+              installLocation: "",
+            },
+          },
+        )
+      : { modifiedCount: 0 };
 
-  const usersCol = db.collection<UserDoc>("users");
-  // change "devices" and "userId" if your schema is different
-  const devicesCol = db.collection("devices");
+  const authUserIdFilters: Record<string, unknown>[] = [{ userId }];
+  if (userObjectId) authUserIdFilters.push({ userId: userObjectId });
 
-  let _id: ObjectId;
-  try {
-    _id = new ObjectId(userId);
-  } catch {
-    throw new Error("Invalid user id");
-  }
+  const accountsDeleted = await accounts.deleteMany({
+    $or: authUserIdFilters,
+  });
 
-  const userRes = await usersCol.deleteOne({ _id });
-  // if you store userId as ObjectId string, this will still match
-  const devicesRes = await devicesCol.deleteMany({ userId });
+  const sessionsDeleted = await sessions.deleteMany({
+    $or: authUserIdFilters,
+  });
+
+  const deleteUserFilter: Record<string, unknown> = userObjectId
+    ? { _id: userObjectId }
+    : { _id: userId };
+
+  const deletedUser = await users.deleteOne(deleteUserFilter);
 
   return {
-    deletedUser: userRes.deletedCount ?? 0,
-    deletedDevices: devicesRes.deletedCount ?? 0,
+    deletedUser: deletedUser.deletedCount > 0,
+    devicesUnassigned: devicesUnassigned.modifiedCount ?? 0,
+    readingsDeleted: readingsDeleted.deletedCount ?? 0,
+    farmsDeleted: farmsDeleted.deletedCount ?? 0,
+    accountsDeleted: accountsDeleted.deletedCount ?? 0,
+    sessionsDeleted: sessionsDeleted.deletedCount ?? 0,
   };
 }
