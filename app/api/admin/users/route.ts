@@ -19,13 +19,15 @@ export async function GET() {
     {
       ok: true,
       users: users.map((u) => ({
-        id: u._id.toString(),
+        id: u.id,
         email: u.email,
         name: u.name ?? null,
         image: u.image ?? null,
         role: u.role ?? "user",
+        createdAt: u.createdAt ?? null,
+        updatedAt: u.updatedAt ?? null,
       })),
     },
-    { status: 200 }
+    { status: 200 },
   );
 }
