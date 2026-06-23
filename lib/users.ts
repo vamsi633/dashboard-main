@@ -1,5 +1,5 @@
 import clientPromise from "@/lib/mongodb";
-import { ObjectId } from "mongodb";
+import { ObjectId, type Filter } from "mongodb";
 
 type DeleteUserResult = {
   deletedUser: boolean;
@@ -10,14 +10,44 @@ type DeleteUserResult = {
   sessionsDeleted: number;
 };
 
-type UserDoc = Record<string, unknown> & {
-  _id?: ObjectId | string;
+type UserDoc = {
+  _id: ObjectId;
   email?: string;
+  role?: Role;
+  updatedAt?: Date;
 };
 
 type DeviceDoc = {
   deviceId?: string;
 };
+
+export type Role = "admin" | "user";
+
+export async function setUserRole(userId: string, role: Role) {
+  const client = await clientPromise;
+  const db = client.db(process.env.MONGODB_DB ?? "epiciot");
+
+  const users = db.collection<UserDoc>("users");
+
+  if (!ObjectId.isValid(userId)) {
+    return { matched: 0, modified: 0 };
+  }
+
+  const result = await users.updateOne(
+    { _id: new ObjectId(userId) },
+    {
+      $set: {
+        role,
+        updatedAt: new Date(),
+      },
+    },
+  );
+
+  return {
+    matched: result.matchedCount,
+    modified: result.modifiedCount,
+  };
+}
 
 export async function deleteUserAndDevices(
   userId: string,
@@ -32,12 +62,20 @@ export async function deleteUserAndDevices(
   const accounts = db.collection<Record<string, unknown>>("accounts");
   const sessions = db.collection<Record<string, unknown>>("sessions");
 
-  const userObjectId = ObjectId.isValid(userId) ? new ObjectId(userId) : null;
+  if (!ObjectId.isValid(userId)) {
+    return {
+      deletedUser: false,
+      devicesUnassigned: 0,
+      readingsDeleted: 0,
+      farmsDeleted: 0,
+      accountsDeleted: 0,
+      sessionsDeleted: 0,
+    };
+  }
 
-  const userLookupFilters: Record<string, unknown>[] = [{ _id: userId }];
-  if (userObjectId) userLookupFilters.unshift({ _id: userObjectId });
+  const userObjectId = new ObjectId(userId);
 
-  const user = await users.findOne({ $or: userLookupFilters });
+  const user = await users.findOne({ _id: userObjectId });
 
   if (!user) {
     return {
@@ -91,8 +129,10 @@ export async function deleteUserAndDevices(
         )
       : { modifiedCount: 0 };
 
-  const authUserIdFilters: Record<string, unknown>[] = [{ userId }];
-  if (userObjectId) authUserIdFilters.push({ userId: userObjectId });
+  const authUserIdFilters: Filter<Record<string, unknown>>[] = [
+    { userId },
+    { userId: userObjectId },
+  ];
 
   const accountsDeleted = await accounts.deleteMany({
     $or: authUserIdFilters,
@@ -102,11 +142,7 @@ export async function deleteUserAndDevices(
     $or: authUserIdFilters,
   });
 
-  const deleteUserFilter: Record<string, unknown> = userObjectId
-    ? { _id: userObjectId }
-    : { _id: userId };
-
-  const deletedUser = await users.deleteOne(deleteUserFilter);
+  const deletedUser = await users.deleteOne({ _id: userObjectId });
 
   return {
     deletedUser: deletedUser.deletedCount > 0,
